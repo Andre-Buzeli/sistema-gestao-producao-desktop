@@ -1,6 +1,6 @@
 {
   "name": "sistema-gestao-producao-desktop",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Sistema Desktop de Gestão de Produção",
   "main": "main.js",
   "homepage": "https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop",
@@ -12,14 +12,15 @@
     "cookie": "^0.7.2",
     "cookie-parser": "^1.4.7",
     "electron-log": "^5.4.1",
+    "electron-updater": "^6.6.2",
     "express": "^4.18.2",
     "localtunnel": "^2.0.2",
+    "portfinder": "^1.0.37",
     "sqlite3": "^5.1.7"
   },
   "devDependencies": {
     "electron": "^36.4.0",
-    "electron-builder": "^26.0.12",
-    "electron-updater": "^6.6.2"
+    "electron-builder": "^26.0.12"
   },
   "scripts": {
     "start": "electron .",
