@@ -1,6 +1,6 @@
 {
   "name": "sistema-gestao-producao-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Sistema Desktop de Gestão de Produção",
   "main": "main.js",
   "homepage": "https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop",
@@ -8,108 +8,88 @@
     "type": "git",
     "url": "https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop.git"
   },
-  "dependencies": {
-    "cookie": "^0.7.2",
-    "cookie-parser": "^1.4.7",
-    "electron-log": "^5.4.1",
-    "electron-updater": "^6.6.2",
-    "express": "^4.18.2",
-    "localtunnel": "^2.0.2",
-    "portfinder": "^1.0.37",
-    "sqlite3": "^5.1.7"
+  "author": {
+    "name": "Andre Buzeli",
+    "email": "buzeli.automacao@gmail.com"
   },
-  "devDependencies": {
-    "electron": "^36.4.0",
-    "electron-builder": "^26.0.12"
-  },
+  "license": "MIT",
+  "keywords": [
+    "gestao-producao",
+    "electron",
+    "desktop-app",
+    "producao-industrial",
+    "controle-estoque"
+  ],
   "scripts": {
     "start": "electron .",
-    "dev": "electron . --dev",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
-    "build-portable": "electron-builder --win portable",
-    "build-installer": "electron-builder --win nsis",
-    "dist": "npm run build-win",
+    "build-linux": "electron-builder --linux",
+    "build-mac": "electron-builder --mac",
+    "dist": "npm run build",
     "pack": "electron-builder --dir",
-    "postinstall": "electron-builder install-app-deps",
-    "publish": "electron-builder --publish=always",
-    "release": "npm run build && npm run publish",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "build": {
-    "appId": "com.gestao.producao.desktop",
+    "appId": "com.andrebuzeli.sistema-gestao-producao",
     "productName": "Sistema de Gestão de Produção",
-    "copyright": "Copyright © 2025 Sistema de Gestão",
-    "publish": [
-      {
-        "provider": "github",
-        "owner": "Andre-Buzeli",
-        "repo": "sistema-gestao-producao-desktop"
-      }
-    ],
+    "copyright": "Copyright © 2024 Andre Buzeli",
     "directories": {
-      "output": "dist",
-      "buildResources": "build"
+      "output": "dist"
     },
     "files": [
-      "main.js",
-      "preload.js",
-      "frontend/**/*",
-      "backend/**/*",
-      "database/**/*",
-      "!**/*.map",
-      "!**/node_modules/.cache",
-      "!**/node_modules/electron/**",
-      "!**/node_modules/@electron/**"
-    ],
-    "extraResources": [
-      {
-        "from": "database/",
-        "to": "database/",
-        "filter": [
-          "**/*"
-        ]
-      }
+      "**/*",
+      "!**/*.md",
+      "!.git",
+      "!dist",
+      "!node_modules/.cache",
+      "!temp"
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         },
         {
           "target": "portable",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
-      "icon": "build/factory-icon.png",
-      "requestedExecutionLevel": "asInvoker",
-      "forceCodeSigning": false,
-      "signAndEditExecutable": false
+      "icon": "build/icon.ico",
+      "publisherName": "Andre Buzeli",
+      "verifyUpdateCodeSignature": false
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "displayLanguageSelector": true,
-      "license": "build/license.txt"
+      "shortcutName": "Sistema de Gestão de Produção"
     },
     "portable": {
-      "artifactName": "${productName}-${version}-portable.exe"
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Andre-Buzeli",
+      "repo": "sistema-gestao-producao-desktop"
     }
   },
-  "keywords": [
-    "gestao",
-    "producao",
-    "desktop",
-    "electron"
-  ],
-  "author": "Sistema de Gestão",
-  "license": "MIT"
+  "devDependencies": {
+    "electron": "^32.2.6",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "express": "^4.21.1",
+    "sqlite3": "^5.1.7",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "qrcode": "^1.5.4",
+    "node-machine-id": "^1.1.12",
+    "electron-updater": "^6.3.9",
+    "electron-log": "^5.2.2",
+    "googleapis": "^144.0.0",
+    "ngrok": "^5.0.0-beta.2"
+  }
 }
