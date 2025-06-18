@@ -2,13 +2,14 @@ appId: com.gestao.producao.desktop
 productName: Sistema de Gestão de Produção
 copyright: Copyright © 2025 Sistema de Gestão
 
-# Configuração do auto-updater
+# Configuração do auto-updater v1.1.0 - Sistema Robusto
 publish:
   - provider: github
     owner: Andre-Buzeli
     repo: sistema-gestao-producao-desktop
     releaseType: release
     private: false
+    publishAutoUpdate: true
 
 # Diretórios
 directories:
@@ -58,7 +59,7 @@ nsis:
   warningsAsErrors: false
   installerIcon: build/icon.ico
   uninstallerIcon: build/icon.ico
-  artifactName: ${productName} Setup ${version}.exe
+  artifactName: sistema-gestao-producao-desktop-setup-${version}.exe
 
 # Configuração da versão portátil
 portable:

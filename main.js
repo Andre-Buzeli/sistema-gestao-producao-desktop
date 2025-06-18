@@ -7,36 +7,16 @@ const dataStore = require('./backend/data-store');
 const express = require('express');
 const localtunnel = require('localtunnel');
 const sqlite3 = require('sqlite3').verbose();
-const { autoUpdater } = require('electron-updater');
+// Importar o novo sistema de auto-updater
+const AutoUpdaterManager = require('./backend/auto-updater');
 
-// Configuração do auto-updater
-// A configuração principal está no package.json na seção "publish"
-// Isso garante que use o repositório correto definido lá
-
-// Configurações para instalação silenciosa automática
-autoUpdater.autoDownload = false; // Controle manual do download
-autoUpdater.autoInstallOnAppQuit = true;
-autoUpdater.autoRunAppAfterInstall = true;
-
-// Configuração adicional para instalação automática
-autoUpdater.allowDowngrade = false;
-autoUpdater.allowPrerelease = false;
-
-// Logs do auto-updater
+// Logs principais
 const log = require('electron-log');
-autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
 
 // Adicionar caminho de log para debug
 const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
 log.transports.file.file = logPath;
 console.log('📝 Arquivo de log:', logPath);
-
-// Desabilitar completamente em desenvolvimento
-if (!app.isPackaged) {
-    autoUpdater.autoDownload = false;
-    autoUpdater.autoInstallOnAppQuit = false;
-}
 
 // ==========================================
 // SISTEMA DE DEBUG PARA APP INSTALADO
@@ -176,6 +156,7 @@ class DesktopManager {
         this.tunnelUrl = null;
         this.initialized = false; // Flag de inicialização
         this.sqliteAuthMiddleware = null; // Middleware de autenticação
+        this.autoUpdater = null; // Gerenciador de auto-update
     }
 
     async initialize() {
@@ -674,215 +655,112 @@ class DesktopManager {
             this.setupExternalAccess();
         });
 
-        // Auto-updater events
+        // Auto-updater events - Sistema Novo v1.1.0
         ipcMain.handle('updater:check', () => this.checkForUpdates());
-        ipcMain.handle('updater:download', () => this.downloadUpdate());
-        ipcMain.handle('updater:install', () => this.installUpdate());
+        ipcMain.handle('updater:force-check', () => this.forceCheckForUpdates());
+        ipcMain.handle('updater:get-info', () => this.getUpdateInfo());
+        ipcMain.handle('updater:get-progress', () => this.getUpdateProgress());
+        ipcMain.handle('updater:is-updating', () => this.isUpdating());
+        ipcMain.handle('updater:get-status', () => ({
+            isUpdating: this.isUpdating(),
+            updateInfo: this.getUpdateInfo(),
+            progressInfo: this.getUpdateProgress(),
+            version: app.getVersion()
+        }));
     }
 
     setupAutoUpdater() {
-        // Detectar se é versão portável
-        const isPortable = process.env.PORTABLE_EXECUTABLE_DIR || 
-                          app.getPath('exe').includes('portable') ||
-                          !app.getPath('userData').includes('AppData');
-
-        // Variável para controlar instalação silenciosa
-        let silentInstallMode = false;
-
-        // Auto-updater events
-        autoUpdater.on('checking-for-update', () => {
-            console.log('🔍 Verificando atualizações...');
-            this.notifyRenderer('updater:checking');
-        });
-
-        autoUpdater.on('update-available', (info) => {
-            console.log('📥 Atualização disponível:', info.version);
-            this.notifyRenderer('updater:available', info);
+        try {
+            // Inicializar o novo sistema de auto-updater
+            this.autoUpdater = new AutoUpdaterManager();
             
-            if (isPortable) {
-                // Para versão portável: apenas notificar e abrir link
-                dialog.showMessageBox(this.mainWindow, {
-                    type: 'info',
-                    title: 'Atualização Disponível (Versão Portável)',
-                    message: `Nova versão ${info.version} disponível!`,
-                    detail: 'Como você está usando a versão portável, precisa baixar a nova versão manualmente.\n\nDeseja abrir a página de download?',
-                    buttons: ['Abrir Download', 'Mais tarde'],
-                    defaultId: 0
-                }).then(result => {
-                    if (result.response === 0) {
-                        require('electron').shell.openExternal('https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop/releases');
-                    }
-                });
-            } else {
-                // Para versão instalada: mostrar opção de instalação automática silenciosa
-                dialog.showMessageBox(this.mainWindow, {
-                    type: 'info',
-                    title: 'Atualização Disponível',
-                    message: `Nova versão ${info.version} disponível!`,
-                    detail: 'Escolha como deseja instalar a atualização:',
-                    buttons: ['Instalar Automaticamente (Silencioso)', 'Instalar com Interface', 'Mais tarde'],
-                    defaultId: 0,
-                    cancelId: 2
-                }).then(result => {
-                    if (result.response === 0) {
-                        // Instalação silenciosa automática
-                        console.log('🔄 Iniciando instalação silenciosa automática...');
-                        silentInstallMode = true;
-                        this.notifyRenderer('updater:silent-install');
-                        autoUpdater.downloadUpdate();
-                    } else if (result.response === 1) {
-                        // Instalação com interface
-                        console.log('🔄 Iniciando instalação com interface...');
-                        silentInstallMode = false;
-                        autoUpdater.downloadUpdate();
-                    }
-                });
-            }
-        });
+            // Configurar listeners para comunicação com o renderer
+            this.autoUpdater.on('checking-for-update', () => {
+                this.notifyRenderer('updater:checking');
+            });
 
-        autoUpdater.on('update-not-available', () => {
-            console.log('✅ Aplicação está atualizada');
-            this.notifyRenderer('updater:not-available');
-        });
+            this.autoUpdater.on('update-available', (info) => {
+                this.notifyRenderer('updater:available', info);
+            });
 
-        autoUpdater.on('error', (err) => {
-            console.error('❌ Erro no auto-updater:', err);
-            this.notifyRenderer('updater:error', err.message);
+            this.autoUpdater.on('update-not-available', (info) => {
+                this.notifyRenderer('updater:not-available', info);
+            });
+
+            this.autoUpdater.on('error', (error) => {
+                this.notifyRenderer('updater:error', error.message);
+            });
+
+            this.autoUpdater.on('download-progress', (progressObj) => {
+                this.notifyRenderer('updater:progress', progressObj);
+            });
+
+            this.autoUpdater.on('update-downloaded', (info) => {
+                this.notifyRenderer('updater:downloaded', info);
+            });
+
+            this.autoUpdater.on('download-started', () => {
+                this.notifyRenderer('updater:download-started');
+            });
+
+            this.autoUpdater.on('install-started', () => {
+                this.notifyRenderer('updater:install-started');
+            });
+
+            console.log('✅ Sistema de auto-updater novo configurado com sucesso');
             
-            // Para versão portável, oferecer download manual em caso de erro
-            if (isPortable) {
-                dialog.showMessageBox(this.mainWindow, {
-                    type: 'warning',
-                    title: 'Verificação de Updates',
-                    message: 'Não foi possível verificar atualizações automaticamente.',
-                    detail: 'Deseja verificar manualmente na página de releases?',
-                    buttons: ['Abrir Página', 'Cancelar'],
-                    defaultId: 0
-                }).then(result => {
-                    if (result.response === 0) {
-                        require('electron').shell.openExternal('https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop/releases');
-                    }
-                });
-            }
-        });
-
-        autoUpdater.on('download-progress', (progressObj) => {
-            const msg = `Baixando ${Math.round(progressObj.percent)}%`;
-            console.log('📥', msg);
-            this.notifyRenderer('updater:progress', progressObj);
-        });
-
-        autoUpdater.on('update-downloaded', () => {
-            console.log('✅ Atualização baixada');
-            this.notifyRenderer('updater:downloaded');
+        } catch (error) {
+            console.error('❌ Erro ao configurar auto-updater:', error);
             
-            if (silentInstallMode) {
-                // Instalação silenciosa automática - sem diálogos
-                console.log('🔄 Iniciando instalação silenciosa...');
-                this.notifyRenderer('updater:installing');
-                
-                // Salvar dados importantes antes da instalação
-                this.saveApplicationState();
-                
-                // Aguardar 2 segundos e instalar automaticamente
-                setTimeout(() => {
-                    console.log('🔄 Aplicando atualização silenciosamente...');
-                    this.notifyRenderer('updater:installed');
-                    autoUpdater.quitAndInstall(true, true); // silent=true, forceRunAfter=true
-                }, 2000);
-                
-            } else {
-                // Instalação com interface - perguntar ao usuário
-                dialog.showMessageBox(this.mainWindow, {
-                    type: 'info',
-                    title: 'Atualização Pronta',
-                    message: 'Atualização baixada com sucesso!',
-                    detail: 'Reiniciar agora para aplicar a atualização?',
-                    buttons: ['Reiniciar', 'Mais tarde'],
-                    defaultId: 0
-                }).then(result => {
-                    if (result.response === 0) {
-                        autoUpdater.quitAndInstall();
-                    }
-                });
-            }
-        });
-
-        // Verificar atualizações automaticamente (apenas em produção)
-        if (!app.isPackaged) {
-            console.log('🔧 Modo desenvolvimento - auto-updater desabilitado');
-            return;
+            // Fallback para logging básico
+            this.autoUpdater = {
+                checkForUpdates: () => console.log('🔧 Auto-updater desabilitado devido a erro'),
+                forceCheckForUpdates: () => console.log('🔧 Auto-updater desabilitado devido a erro')
+            };
         }
-
-        // Log do tipo de instalação
-        console.log(`🔧 Tipo de instalação: ${isPortable ? 'Portável' : 'Instalado'}`);
-        
-        // Verificar atualizações na inicialização
-        setTimeout(() => {
-            this.checkForUpdates();
-        }, 5000);
-
-        // Verificar atualizações a cada 4 horas
-        setInterval(() => {
-            this.checkForUpdates();
-        }, 4 * 60 * 60 * 1000);
     }
 
     async checkForUpdates() {
-        if (!app.isPackaged) {
-            console.log('🔧 Desenvolvimento - verificação de updates desabilitada');
+        if (!this.autoUpdater) {
+            console.log('🔧 Auto-updater não inicializado');
             return;
         }
 
         try {
-            return await autoUpdater.checkForUpdatesAndNotify();
+            return await this.autoUpdater.checkForUpdates();
         } catch (error) {
             console.error('❌ Erro ao verificar atualizações:', error);
             throw error;
         }
     }
 
-    async downloadUpdate() {
+    async forceCheckForUpdates() {
+        if (!this.autoUpdater) {
+            console.log('🔧 Auto-updater não inicializado');
+            return;
+        }
+
         try {
-            return await autoUpdater.downloadUpdate();
+            return await this.autoUpdater.forceCheckForUpdates();
         } catch (error) {
-            console.error('❌ Erro ao baixar atualização:', error);
+            console.error('❌ Erro ao verificar atualizações forçadamente:', error);
             throw error;
         }
     }
 
-    installUpdate() {
-        autoUpdater.quitAndInstall();
+    getUpdateInfo() {
+        return this.autoUpdater ? this.autoUpdater.getUpdateInfo() : null;
     }
 
-    // Função para salvar estado da aplicação antes da instalação
-    saveApplicationState() {
-        try {
-            const fs = require('fs');
-            const path = require('path');
-            
-            const appState = {
-                timestamp: new Date().toISOString(),
-                version: app.getVersion(),
-                updateTimestamp: Date.now(),
-                serverPort: this.serverPort || 3000,
-                isServerRunning: this.isServerRunning || false,
-                lastActivity: new Date().toISOString()
-            };
-            
-            const userDataPath = app.getPath('userData');
-            const statePath = path.join(userDataPath, 'app-state-backup.json');
-            
-            fs.writeFileSync(statePath, JSON.stringify(appState, null, 2));
-            console.log('💾 Estado da aplicação salvo para:', statePath);
-            
-            // Notificar renderer sobre backup
-            this.notifyRenderer('updater:state-saved', appState);
-            
-        } catch (error) {
-            console.error('❌ Erro ao salvar estado da aplicação:', error);
-        }
+    getUpdateProgress() {
+        return this.autoUpdater ? this.autoUpdater.getProgressInfo() : null;
     }
+
+    isUpdating() {
+        return this.autoUpdater ? this.autoUpdater.getIsUpdating() : false;
+    }
+
+
 
     async startServer() {
         console.log('🚀 ==> INICIANDO STARTSERVER - Passo 1');
