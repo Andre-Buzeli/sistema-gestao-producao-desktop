@@ -27,6 +27,11 @@ const log = require('electron-log');
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
+// Adicionar caminho de log para debug
+const logPath = path.join(app.getPath('userData'), 'logs', 'main.log');
+log.transports.file.file = logPath;
+console.log('📝 Arquivo de log:', logPath);
+
 // Desabilitar completamente em desenvolvimento
 if (!app.isPackaged) {
     autoUpdater.autoDownload = false;
@@ -43,43 +48,72 @@ log.transports.console.level = 'debug';
 log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
 log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
 
+// Guardar referências originais ANTES de substituir
+const originalConsoleLog = console.log;
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+
 // Função para log que funciona em desenvolvimento E produção
 function debugLog(level, message, ...args) {
-    const timestamp = new Date().toISOString();
-    const logMessage = `[${timestamp}] ${message}`;
-    
-    // Console log sempre (para npm start)
-    console[level] ? console[level](logMessage, ...args) : console.log(logMessage, ...args);
-    
-    // Electron log (para app instalado)
-    if (log && log[level]) {
-        log[level](logMessage, ...args);
-    }
-    
-    // Armazenar em array para exibir na UI (opcional)
-    if (!global.debugLogs) global.debugLogs = [];
-    global.debugLogs.push({ timestamp, level, message: logMessage, args });
-    
-    // Manter apenas os últimos 1000 logs
-    if (global.debugLogs.length > 1000) {
-        global.debugLogs = global.debugLogs.slice(-1000);
+    try {
+        const timestamp = new Date().toISOString();
+        const logMessage = `[${timestamp}] ${message}`;
+        
+        // Console log sempre (para npm start) - usar as funções ORIGINAIS
+        switch(level) {
+            case 'error':
+                originalConsoleError(logMessage, ...args);
+                break;
+            case 'warn':
+                originalConsoleWarn(logMessage, ...args);
+                break;
+            default:
+                originalConsoleLog(logMessage, ...args);
+        }
+        
+        // Electron log (para app instalado)
+        if (log && log[level]) {
+            log[level](logMessage, ...args);
+        }
+        
+        // Armazenar em array para exibir na UI (opcional)
+        if (!global.debugLogs) global.debugLogs = [];
+        global.debugLogs.push({ timestamp, level, message: logMessage, args });
+        
+        // Manter apenas os últimos 1000 logs
+        if (global.debugLogs.length > 1000) {
+            global.debugLogs = global.debugLogs.slice(-1000);
+        }
+    } catch (error) {
+        // Fallback - se der erro, usa console original diretamente
+        originalConsoleError('[DEBUG LOG ERROR]', error);
+        originalConsoleLog('[FALLBACK LOG]', message, ...args);
     }
 }
 
 // Substituir console.log global por nossa função de debug
-const originalConsoleLog = console.log;
 console.log = (...args) => {
-    debugLog('info', args.join(' '));
+    try {
+        debugLog('info', args.join(' '));
+    } catch (e) {
+        originalConsoleLog(...args);
+    }
 };
 
-const originalConsoleError = console.error;
 console.error = (...args) => {
-    debugLog('error', args.join(' '));
+    try {
+        debugLog('error', args.join(' '));
+    } catch (e) {
+        originalConsoleError(...args);
+    }
 };
 
-const originalConsoleWarn = console.warn;
 console.warn = (...args) => {
-    debugLog('warn', args.join(' '));
+    try {
+        debugLog('warn', args.join(' '));
+    } catch (e) {
+        originalConsoleWarn(...args);
+    }
 };
 
 // Tratamento global de erros não capturados
@@ -119,11 +153,16 @@ if (!app.isPackaged) {
     app.commandLine.appendSwitch('--disable-domain-reliability');
 } else {
     // EM PRODUÇÃO - Manter logs ativos para debug
-    debugLog('info', '🏭 MODO PRODUÇÃO - Logs de debug ativados');
-    debugLog('info', `📍 Diretório da aplicação: ${__dirname}`);
-    debugLog('info', `📍 Diretório de trabalho: ${process.cwd()}`);
-    debugLog('info', `📍 Versão do Electron: ${process.versions.electron}`);
-    debugLog('info', `📍 Versão do Node: ${process.versions.node}`);
+    try {
+        debugLog('info', '🏭 MODO PRODUÇÃO - Logs de debug ativados');
+        debugLog('info', `📍 Diretório da aplicação: ${__dirname}`);
+        debugLog('info', `📍 Diretório de trabalho: ${process.cwd()}`);
+        debugLog('info', `📍 Versão do Electron: ${process.versions.electron}`);
+        debugLog('info', `📍 Versão do Node: ${process.versions.node}`);
+    } catch (err) {
+        // Se falhar, usa console original
+        originalConsoleLog('🏭 MODO PRODUÇÃO - Erro no sistema de debug:', err);
+    }
 }
 
 class DesktopManager {
@@ -1777,10 +1816,22 @@ const desktopManager = new DesktopManager();
 // Event handlers do Electron
 app.whenReady().then(async () => {
     try {
+        console.log('🚀 ==> APP READY - Iniciando aplicação...');
         await desktopManager.initialize();
+        console.log('✅ ==> APP READY - Inicialização completa');
         desktopManager.createMainWindow();
+        console.log('✅ ==> APP READY - Janela principal criada');
     } catch (error) {
         console.error('❌ Erro fatal na inicialização:', error);
+        // Tentar usar console original se debugLog falhar
+        if (originalConsoleError) {
+            originalConsoleError('❌ ERRO FATAL:', error);
+        }
+        // Mostrar dialog de erro
+        const { dialog } = require('electron');
+        dialog.showErrorBox('Erro Fatal', 
+            `Falha ao iniciar aplicação:\n\n${error.message}\n\nPor favor, reinstale a aplicação.`
+        );
         app.quit();
     }
 });
