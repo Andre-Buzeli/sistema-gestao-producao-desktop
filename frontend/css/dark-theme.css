@@ -223,3 +223,227 @@ tr:hover {
 ::-webkit-scrollbar-thumb:hover {
     background: var(--border-hover);
 }
+
+/* ===== CORREÇÕES DO TEMA ESCURO v1.0.5 ===== */
+
+/* Correção de títulos e textos */
+.card-title {
+    color: var(--text-primary) !important;
+}
+
+.device-name {
+    color: var(--text-primary) !important;
+}
+
+.device-details {
+    color: var(--text-secondary) !important;
+}
+
+.order-code {
+    color: var(--text-primary) !important;
+}
+
+.product-name strong {
+    color: var(--text-primary) !important;
+}
+
+.product-code {
+    background: var(--bg-hover) !important;
+    color: var(--text-secondary) !important;
+}
+
+.product-details {
+    color: var(--text-secondary) !important;
+}
+
+.product-description {
+    color: var(--text-secondary) !important;
+}
+
+/* Correção de backgrounds */
+.server-info div {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.server-info strong {
+    color: var(--text-primary) !important;
+}
+
+.device-item {
+    background: var(--bg-surface) !important;
+    border-left-color: var(--primary) !important;
+    color: var(--text-primary) !important;
+}
+
+.category-tab {
+    background: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-secondary) !important;
+}
+
+.category-tab:hover {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+
+.category-tab.active {
+    background: var(--primary) !important;
+    color: white !important;
+    border-color: var(--primary) !important;
+}
+
+.product-item {
+    background: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+}
+
+.product-item:hover {
+    border-color: var(--primary) !important;
+}
+
+.order-item {
+    background: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+}
+
+.order-header {
+    background: var(--bg-hover) !important;
+    border-bottom-color: var(--border) !important;
+}
+
+.order-product {
+    border-bottom-color: var(--border) !important;
+}
+
+/* Correção dos cards de estatísticas */
+.stat-card {
+    background: var(--bg-surface) !important;
+    border: 1px solid var(--border) !important;
+}
+
+.stat-value {
+    color: var(--primary) !important;
+}
+
+.stat-label {
+    color: var(--text-secondary) !important;
+}
+
+/* Correção de status badges com cores adequadas */
+.status-pending {
+    background: rgba(245, 158, 11, 0.2) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+.status-authorized {
+    background: rgba(34, 197, 94, 0.2) !important;
+    color: #22c55e !important;
+    border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.status-revoked {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.order-status.completed {
+    background: rgba(34, 197, 94, 0.2) !important;
+    color: #22c55e !important;
+}
+
+.order-status.pending {
+    background: rgba(245, 158, 11, 0.2) !important;
+    color: #f59e0b !important;
+}
+
+/* Correção de elementos de tunnel */
+.tunnel-connected {
+    background: rgba(34, 197, 94, 0.2) !important;
+    color: #22c55e !important;
+    border: 1px solid rgba(34, 197, 94, 0.3) !important;
+}
+
+.tunnel-disconnected {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #ef4444 !important;
+    border: 1px solid rgba(239, 68, 68, 0.3) !important;
+}
+
+.tunnel-connecting {
+    background: rgba(245, 158, 11, 0.2) !important;
+    color: #f59e0b !important;
+    border: 1px solid rgba(245, 158, 11, 0.3) !important;
+}
+
+/* Loading e elementos de texto */
+.loading {
+    color: var(--text-muted) !important;
+}
+
+/* Correção do page title */
+.page-title {
+    color: var(--text-primary) !important;
+}
+
+/* Correção para elementos inline */
+[style*="color: #7f8c8d"] {
+    color: var(--text-secondary) !important;
+}
+
+[style*="color: #2c3e50"] {
+    color: var(--text-primary) !important;
+}
+
+[style*="background: white"],
+[style*="background: #fff"] {
+    background: var(--bg-surface) !important;
+}
+
+[style*="background: #f8f9fa"] {
+    background: var(--bg-hover) !important;
+}
+
+/* Correção de botões inline */
+button[style*="background: white"] {
+    background: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Garantir que modais tenham tema escuro */
+.modal-content * {
+    color: var(--text-primary);
+}
+
+/* Ajustes finais de contraste */
+.dashboard-card {
+    background: var(--bg-surface) !important;
+    border-color: var(--border) !important;
+}
+
+.dashboard-card:hover {
+    border-color: var(--border-hover) !important;
+}
+
+/* Correção de elementos de formulário em modais */
+.modal-content input,
+.modal-content select,
+.modal-content textarea {
+    background: var(--bg-primary) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Garantir boa legibilidade em todos elementos de texto */
+p, span, div, label, li, td, th {
+    color: var(--text-primary);
+}
+
+/* Ajuste de opacidade para elementos desabilitados */
+[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
