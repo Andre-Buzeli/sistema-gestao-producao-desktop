@@ -80,7 +80,6 @@
           ]
         }
       ],
-      "icon": "build/factory-icon.png",
       "requestedExecutionLevel": "asInvoker",
       "forceCodeSigning": false,
       "signAndEditExecutable": false
@@ -92,16 +91,10 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "displayLanguageSelector": true,
-      "license": "build/license.txt",
       "perMachine": false,
       "runAfterFinish": true,
       "deleteAppDataOnUninstall": false,
-      "warningsAsErrors": false,
-      "installerHeaderIcon": "build/factory-icon.png",
-      "installerIcon": "build/factory-icon.png",
-      "uninstallerIcon": "build/factory-icon.png",
-      "installerSidebar": "build/factory-icon.png",
-      "uninstallerSidebar": "build/factory-icon.png"
+      "warningsAsErrors": false
     },
     "portable": {
       "artifactName": "${productName}-${version}-portable.exe"

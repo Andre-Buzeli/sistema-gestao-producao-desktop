@@ -21,6 +21,10 @@ autoUpdater.autoDownload = true;
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.autoRunAppAfterInstall = true;
 
+// Configuração adicional para instalação automática
+autoUpdater.allowDowngrade = false;
+autoUpdater.allowPrerelease = false;
+
 // Logs do auto-updater
 autoUpdater.logger = require('electron-log');
 autoUpdater.logger.transports.file.level = 'info';
