@@ -53,6 +53,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         }
     },
 
+    // Debug logs para produção
+    debug: {
+        logs: () => ipcRenderer.invoke('debug:logs'),
+        clear: () => ipcRenderer.invoke('debug:clear')
+    },
+
     // Configurações
     settings: {
         get: () => ipcRenderer.invoke('settings:get'),

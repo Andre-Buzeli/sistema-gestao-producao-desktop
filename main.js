@@ -33,40 +33,98 @@ if (!app.isPackaged) {
     autoUpdater.autoInstallOnAppQuit = false;
 }
 
+// ==========================================
+// SISTEMA DE DEBUG PARA APP INSTALADO
+// ==========================================
+
+// Configurar electron-log para produção
+log.transports.file.level = 'debug';
+log.transports.console.level = 'debug';
+log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
+log.transports.file.format = '[{y}-{m}-{d} {h}:{i}:{s}.{ms}] [{level}] {text}';
+
+// Função para log que funciona em desenvolvimento E produção
+function debugLog(level, message, ...args) {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[${timestamp}] ${message}`;
+    
+    // Console log sempre (para npm start)
+    console[level] ? console[level](logMessage, ...args) : console.log(logMessage, ...args);
+    
+    // Electron log (para app instalado)
+    if (log && log[level]) {
+        log[level](logMessage, ...args);
+    }
+    
+    // Armazenar em array para exibir na UI (opcional)
+    if (!global.debugLogs) global.debugLogs = [];
+    global.debugLogs.push({ timestamp, level, message: logMessage, args });
+    
+    // Manter apenas os últimos 1000 logs
+    if (global.debugLogs.length > 1000) {
+        global.debugLogs = global.debugLogs.slice(-1000);
+    }
+}
+
+// Substituir console.log global por nossa função de debug
+const originalConsoleLog = console.log;
+console.log = (...args) => {
+    debugLog('info', args.join(' '));
+};
+
+const originalConsoleError = console.error;
+console.error = (...args) => {
+    debugLog('error', args.join(' '));
+};
+
+const originalConsoleWarn = console.warn;
+console.warn = (...args) => {
+    debugLog('warn', args.join(' '));
+};
+
 // Tratamento global de erros não capturados
 process.on('uncaughtException', (error) => {
-    console.error('❌ ERRO NÃO CAPTURADO:', error);
-    console.error('Stack:', error.stack);
+    const errorMsg = `❌ ERRO NÃO CAPTURADO: ${error.message}`;
+    debugLog('error', errorMsg);
+    debugLog('error', `Stack: ${error.stack}`);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ PROMISE REJEITADA:', reason);
-    console.error('Promise:', promise);
+    debugLog('error', `❌ PROMISE REJEITADA: ${reason}`);
+    debugLog('error', `Promise: ${promise}`);
 });
 
 // Desabilitar aceleração de hardware para evitar problemas de GPU
 app.disableHardwareAcceleration();
 
-// Suprimir logs de erro de GPU que são apenas avisos
-process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
-app.commandLine.appendSwitch('--disable-gpu');
-app.commandLine.appendSwitch('--disable-gpu-sandbox');
-app.commandLine.appendSwitch('--disable-software-rasterizer');
-app.commandLine.appendSwitch('--disable-dev-shm-usage');
-app.commandLine.appendSwitch('--no-sandbox');
-app.commandLine.appendSwitch('--disable-features=VizDisplayCompositor');
-app.commandLine.appendSwitch('--disable-accelerated-2d-canvas');
-app.commandLine.appendSwitch('--disable-accelerated-jpeg-decoding');
-app.commandLine.appendSwitch('--disable-accelerated-mjpeg-decode');
-app.commandLine.appendSwitch('--disable-accelerated-video-decode');
-app.commandLine.appendSwitch('--disable-background-timer-throttling');
-app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows');
-app.commandLine.appendSwitch('--disable-renderer-backgrounding');
-app.commandLine.appendSwitch('--disable-web-security');
-app.commandLine.appendSwitch('--in-process-gpu');
-app.commandLine.appendSwitch('--disable-domain-reliability');
-app.commandLine.appendSwitch('--log-level=3'); // Apenas erros fatais
-app.commandLine.appendSwitch('--disable-logging'); // Desabilitar logs de desenvolvimento
+// Configurações de GPU - apenas em desenvolvimento
+if (!app.isPackaged) {
+    // Suprimir logs de erro de GPU que são apenas avisos APENAS EM DESENVOLVIMENTO
+    process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+    app.commandLine.appendSwitch('--disable-gpu');
+    app.commandLine.appendSwitch('--disable-gpu-sandbox');
+    app.commandLine.appendSwitch('--disable-software-rasterizer');
+    app.commandLine.appendSwitch('--disable-dev-shm-usage');
+    app.commandLine.appendSwitch('--no-sandbox');
+    app.commandLine.appendSwitch('--disable-features=VizDisplayCompositor');
+    app.commandLine.appendSwitch('--disable-accelerated-2d-canvas');
+    app.commandLine.appendSwitch('--disable-accelerated-jpeg-decoding');
+    app.commandLine.appendSwitch('--disable-accelerated-mjpeg-decode');
+    app.commandLine.appendSwitch('--disable-accelerated-video-decode');
+    app.commandLine.appendSwitch('--disable-background-timer-throttling');
+    app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows');
+    app.commandLine.appendSwitch('--disable-renderer-backgrounding');
+    app.commandLine.appendSwitch('--disable-web-security');
+    app.commandLine.appendSwitch('--in-process-gpu');
+    app.commandLine.appendSwitch('--disable-domain-reliability');
+} else {
+    // EM PRODUÇÃO - Manter logs ativos para debug
+    debugLog('info', '🏭 MODO PRODUÇÃO - Logs de debug ativados');
+    debugLog('info', `📍 Diretório da aplicação: ${__dirname}`);
+    debugLog('info', `📍 Diretório de trabalho: ${process.cwd()}`);
+    debugLog('info', `📍 Versão do Electron: ${process.versions.electron}`);
+    debugLog('info', `📍 Versão do Node: ${process.versions.node}`);
+}
 
 class DesktopManager {
     constructor() {
@@ -554,6 +612,15 @@ class DesktopManager {
                 return { success: false, message: 'Erro ao limpar logs' };
             }
         });
+
+        // Debug logs para produção
+        ipcMain.handle('debug:logs', () => {
+            return global.debugLogs || [];
+        });
+        ipcMain.handle('debug:clear', () => {
+            global.debugLogs = [];
+            return { success: true, message: 'Debug logs limpos' };
+        });
         ipcMain.handle('settings:get', () => this.database ? this.database.getSettings() : {});
         ipcMain.handle('settings:update', (event, settings) => this.database.updateSettings(settings));
 
@@ -778,6 +845,8 @@ class DesktopManager {
     }
 
     async startServer() {
+        console.log('🚀 ==> INICIANDO STARTSERVER - Passo 1');
+        
         // Se o servidor já está rodando, retorna sucesso em vez de erro
         if (this.isServerRunning) {
             console.log('ℹ️ Servidor já está em execução');
@@ -785,24 +854,42 @@ class DesktopManager {
         }
 
         try {
+            console.log('🚀 ==> STARTSERVER - Passo 2: Iniciando try block');
+            
             // Adicionar log de início do servidor
             if (this.database) {
+                console.log('🚀 ==> STARTSERVER - Passo 3: Adicionando log no banco');
                 await this.database.addLog('server', 'info', 'Iniciando servidor...');
+            } else {
+                console.log('🚀 ==> STARTSERVER - Passo 3: Banco não disponível, pulando log');
             }
             
+            console.log('🚀 ==> STARTSERVER - Passo 4: Importando dependências');
             const express = require('express');
             const http = require('http');
             const path = require('path');
             const os = require('os');
+            console.log('🚀 ==> STARTSERVER - Passo 5: Dependências importadas com sucesso');
 
+            console.log('🚀 ==> STARTSERVER - Passo 6: Criando instância Express');
             this.server = express();
+            console.log('🚀 ==> STARTSERVER - Passo 7: Express criado com sucesso');
             
             // Middleware para parsing JSON
+            console.log('🚀 ==> STARTSERVER - Passo 8: Configurando middleware JSON');
             this.server.use(express.json());
+            console.log('🚀 ==> STARTSERVER - Passo 9: Middleware JSON configurado');
 
             // Importar middleware SQLite para autenticação persistente
-            const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
-            const sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
+            console.log('🚀 ==> STARTSERVER - Passo 10: Importando middleware SQLite');
+            try {
+                const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
+                const sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
+                console.log('🚀 ==> STARTSERVER - Passo 11: Middleware SQLite importado com sucesso');
+            } catch (middlewareError) {
+                console.error('❌ ERRO ao importar middleware SQLite:', middlewareError);
+                throw new Error(`Falha ao importar middleware: ${middlewareError.message}`);
+            }
 
             // ==========================================
             // SISTEMA DE AUTENTICAÇÃO V2.0 - APIs SIMPLIFICADAS
@@ -1383,49 +1470,116 @@ class DesktopManager {
             });
 
             // Iniciar servidor HTTP
-            const { findAvailablePort } = require('./backend/port-finder');
-            const port = await findAvailablePort(this.serverPort);
+            console.log('🚀 ==> STARTSERVER - Passo 50: Iniciando servidor HTTP');
             
-            this.httpServer = http.createServer(this.server);
-            this.httpServer.listen(port, async () => {
-                this.serverPort = port;
-                this.isServerRunning = true;
+            try {
+                console.log('🚀 ==> STARTSERVER - Passo 51: Importando port-finder');
+                const { findAvailablePort } = require('./backend/port-finder');
+                console.log('🚀 ==> STARTSERVER - Passo 52: Port-finder importado');
                 
-                console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
-                console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
-                console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
+                console.log('🚀 ==> STARTSERVER - Passo 53: Procurando porta disponível');
+                const port = await findAvailablePort(this.serverPort);
+                console.log(`🚀 ==> STARTSERVER - Passo 54: Porta encontrada: ${port}`);
                 
-                // Adicionar log de servidor iniciado
-                if (this.database) {
-                    await this.database.addLog('server', 'info', `Servidor iniciado na porta ${port}`);
-                }
+                console.log('🚀 ==> STARTSERVER - Passo 55: Criando servidor HTTP');
+                this.httpServer = http.createServer(this.server);
+                console.log('🚀 ==> STARTSERVER - Passo 56: Servidor HTTP criado');
                 
-                // Notificar renderer
-                this.notifyRenderer('server:ready', {
-                    port: port,
-                    localIP: this.getLocalIP(),
-                    timestamp: Date.now()
+                console.log('🚀 ==> STARTSERVER - Passo 57: Iniciando listen do servidor');
+                
+                return new Promise((resolve, reject) => {
+                    // Timeout para falha do servidor
+                    const timeout = setTimeout(() => {
+                        console.error('❌ TIMEOUT - Servidor não respondeu em 10 segundos');
+                        reject(new Error('Timeout ao iniciar servidor HTTP'));
+                    }, 10000);
+                    
+                    this.httpServer.listen(port, async () => {
+                        console.log('🚀 ==> STARTSERVER - Passo 58: Servidor HTTP listening callback executado');
+                        clearTimeout(timeout);
+                        
+                        this.serverPort = port;
+                        this.isServerRunning = true;
+                        
+                        console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
+                        console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
+                        console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
+                        
+                        // Adicionar log de servidor iniciado
+                        if (this.database) {
+                            console.log('🚀 ==> STARTSERVER - Passo 59: Adicionando log de sucesso no banco');
+                            await this.database.addLog('server', 'info', `Servidor iniciado na porta ${port}`);
+                        }
+                        
+                        // Notificar renderer
+                        console.log('🚀 ==> STARTSERVER - Passo 60: Notificando renderer');
+                        this.notifyRenderer('server:ready', {
+                            port: port,
+                            localIP: this.getLocalIP(),
+                            timestamp: Date.now()
+                        });
+                        
+                        // Configurar túnel se disponível (não bloqueia o servidor)
+                        console.log('🚀 ==> STARTSERVER - Passo 61: Iniciando configuração de tunnel');
+                        this.setupExternalAccess().catch(err => {
+                            console.error('⚠️ LocalTunnel não pôde ser configurado, mas o servidor está funcionando localmente');
+                        });
+                        
+                        console.log('🚀 ==> STARTSERVER - Passo 62: SUCESSO COMPLETO');
+                        resolve({ success: true, message: 'Servidor iniciado com sucesso', port: port });
+                    });
+                    
+                    this.httpServer.on('error', (serverError) => {
+                        console.error('❌ ERRO HTTP SERVER:', serverError);
+                        clearTimeout(timeout);
+                        reject(serverError);
+                    });
                 });
                 
-                // Configurar túnel se disponível (não bloqueia o servidor)
-                this.setupExternalAccess().catch(err => {
-                    console.error('⚠️ LocalTunnel não pôde ser configurado, mas o servidor está funcionando localmente');
-                });
-            });
-            
-            // Retornar sucesso
-            return { success: true, message: 'Servidor iniciado com sucesso', port: port };
+            } catch (httpError) {
+                console.error('❌ ERRO ao configurar servidor HTTP:', httpError);
+                throw new Error(`Falha ao configurar servidor HTTP: ${httpError.message}`);
+            }
 
         } catch (error) {
-            console.error('❌ Erro ao iniciar servidor:', error);
+            console.error('❌ ==> STARTSERVER - ERRO FATAL:', error);
+            console.error('❌ ==> ERRO Details:', {
+                message: error.message,
+                name: error.name,
+                code: error.code,
+                stack: error.stack?.split('\n').slice(0, 5).join('\n') // Primeiras 5 linhas do stack
+            });
             
-            // Adicionar log de erro
-            if (this.database) {
-                await this.database.addLog('server', 'error', `Erro ao iniciar servidor: ${error.message}`);
+            // Verificar se é problema de dependências
+            if (error.message.includes('Cannot find module')) {
+                console.error('❌ ==> ERRO DE DEPENDÊNCIA DETECTADO');
+                console.error('❌ ==> Diretório atual:', __dirname);
+                console.error('❌ ==> Arquivos no backend:', require('fs').existsSync(path.join(__dirname, 'backend')) ? 'EXISTS' : 'NOT FOUND');
             }
             
-            this.notifyRenderer('server:error', { error: error.message });
-            return { success: false, message: error.message, error: error.toString() };
+            // Adicionar log de erro
+            try {
+                if (this.database) {
+                    await this.database.addLog('server', 'error', `Erro ao iniciar servidor: ${error.message}`);
+                }
+            } catch (logError) {
+                console.error('❌ ==> Erro ao salvar log de erro:', logError);
+            }
+            
+            this.notifyRenderer('server:error', { 
+                error: error.message,
+                details: error.toString(),
+                stack: error.stack,
+                code: error.code
+            });
+            
+            return { 
+                success: false, 
+                message: `Erro ao iniciar servidor: ${error.message}`, 
+                error: error.toString(),
+                code: error.code,
+                stack: error.stack
+            };
         }
     }
 

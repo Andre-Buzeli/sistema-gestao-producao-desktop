@@ -926,6 +926,10 @@
                     <i class="material-icons">history</i>
                     <span>Logs do Sistema</span>
                 </button>
+                <button class="menu-item" onclick="showTab('debug')">
+                    <i class="material-icons">bug_report</i>
+                    <span>Debug Logs</span>
+                </button>
                 <button class="menu-item" onclick="showTab('settings')">
                     <i class="material-icons">settings</i>
                     <span>Configurações</span>
@@ -1143,6 +1147,42 @@
                     </div>
                 </div>
 
+                <!-- Tab: Debug -->
+                <div id="debug-tab" class="tab-content">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <div class="card-icon">
+                                <i class="material-icons">bug_report</i>
+                            </div>
+                            <div class="card-title">Debug Logs (Produção)</div>
+                        </div>
+                        <div id="debug-summary" class="summary-box">
+                            <strong>Logs de Debug em Tempo Real:</strong> <span id="debug-logs-count">Carregando...</span>
+                        </div>
+                        <div class="logs-container" id="debug-logs-container" style="height: 500px;">
+                            <div class="loading">Carregando debug logs...</div>
+                        </div>
+                        <div style="margin-top: 20px;">
+                            <button class="btn btn-primary" onclick="refreshDebugLogs()">
+                                <i class="material-icons">refresh</i>
+                                Atualizar Debug Logs
+                            </button>
+                            <button class="btn btn-danger" onclick="clearDebugLogs()">
+                                <i class="material-icons">clear_all</i>
+                                Limpar Debug Logs
+                            </button>
+                            <button class="btn btn-success" onclick="exportDebugLogs()">
+                                <i class="material-icons">download</i>
+                                Exportar Debug Logs
+                            </button>
+                            <button class="btn btn-primary" onclick="testServerStart()">
+                                <i class="material-icons">play_circle</i>
+                                Testar Início Servidor
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Tab: Settings -->
                 <div id="settings-tab" class="tab-content">
                     <div class="dashboard-card">
@@ -1308,6 +1348,7 @@
                 'orders': 'Ordens',
                 'devices': 'Dispositivos',
                 'logs': 'Logs do Sistema',
+                'debug': 'Debug Logs',
                 'settings': 'Configurações'
             };
             document.getElementById('page-title').textContent = titles[tabName];
@@ -1323,6 +1364,8 @@
                 updateDevices();
             } else if (tabName === 'logs') {
                 updateLogs();
+            } else if (tabName === 'debug') {
+                updateDebugLogs();
             }
         }
 
@@ -1604,6 +1647,106 @@
                 }
             } catch (error) {
                 console.error('Erro ao obter logs:', error);
+            }
+        }
+
+        // ==========================================
+        // FUNÇÕES DE DEBUG LOGS (PRODUÇÃO)
+        // ==========================================
+
+        async function updateDebugLogs() {
+            try {
+                const debugLogs = await window.electronAPI.debug.logs();
+                const debugContainer = document.getElementById('debug-logs-container');
+                const debugCount = document.getElementById('debug-logs-count');
+                
+                if (debugLogs && debugLogs.length > 0) {
+                    debugCount.textContent = `${debugLogs.length} logs de debug disponíveis`;
+                    
+                    // Ordenar logs por timestamp mais recente primeiro
+                    const sortedLogs = debugLogs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                    debugContainer.innerHTML = sortedLogs.slice(0, 100).map(log => `
+                        <div class="log-entry">
+                            <span class="log-timestamp">[${new Date(log.timestamp).toLocaleString('pt-BR')}]</span>
+                            <span class="log-level-${log.level}">${log.level.toUpperCase()}</span>
+                            ${log.message}
+                        </div>
+                    `).join('');
+                } else {
+                    debugCount.textContent = 'Nenhum debug log disponível';
+                    debugContainer.innerHTML = '<div class="loading">Nenhum debug log disponível. Tente iniciar o servidor para gerar logs.</div>';
+                }
+            } catch (error) {
+                console.error('Erro ao obter debug logs:', error);
+                const debugContainer = document.getElementById('debug-logs-container');
+                const debugCount = document.getElementById('debug-logs-count');
+                debugCount.textContent = 'Erro ao carregar logs';
+                debugContainer.innerHTML = `<div class="loading">Erro ao carregar debug logs: ${error.message}</div>`;
+            }
+        }
+
+        async function refreshDebugLogs() {
+            await updateDebugLogs();
+            showNotification('Debug logs atualizados', 'success');
+        }
+
+        async function clearDebugLogs() {
+            if (!confirm('Tem certeza que deseja limpar todos os debug logs?')) return;
+            
+            try {
+                const result = await window.electronAPI.debug.clear();
+                
+                if (result.success) {
+                    showNotification('Debug logs limpos', 'success');
+                    await updateDebugLogs();
+                } else {
+                    showNotification('Erro ao limpar debug logs', 'error');
+                }
+            } catch (error) {
+                console.error('Erro ao limpar debug logs:', error);
+                showNotification('Erro ao limpar debug logs', 'error');
+            }
+        }
+
+        async function exportDebugLogs() {
+            try {
+                const debugLogs = await window.electronAPI.debug.logs();
+                const dataStr = JSON.stringify(debugLogs, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(dataBlob);
+                link.download = `debug-logs-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+                link.click();
+                
+                showNotification('Debug logs exportados', 'success');
+            } catch (error) {
+                console.error('Erro ao exportar debug logs:', error);
+                showNotification('Erro ao exportar debug logs', 'error');
+            }
+        }
+
+        async function testServerStart() {
+            try {
+                showNotification('🚀 Iniciando teste de servidor com debug...', 'info');
+                await updateDebugLogs(); // Capturar logs anteriores
+                
+                const result = await window.electronAPI.server.start();
+                
+                setTimeout(async () => {
+                    await updateDebugLogs(); // Capturar novos logs
+                    
+                    if (result.success) {
+                        showNotification('✅ Servidor iniciado - veja os debug logs', 'success');
+                    } else {
+                        showNotification(`❌ Falha no servidor - veja os debug logs: ${result.message}`, 'error');
+                    }
+                }, 2000);
+                
+            } catch (error) {
+                console.error('Erro no teste de servidor:', error);
+                showNotification('Erro no teste de servidor', 'error');
+                setTimeout(updateDebugLogs, 1000);
             }
         }
 
