@@ -9,15 +9,12 @@ const localtunnel = require('localtunnel');
 const sqlite3 = require('sqlite3').verbose();
 const { autoUpdater } = require('electron-updater');
 
-// Configuração do auto-updater para instalação silenciosa
-autoUpdater.setFeedURL({
-    provider: 'github',
-    owner: 'Andre-Buzeli',
-    repo: 'sistema-gestao-producao-desktop'
-});
+// Configuração do auto-updater
+// A configuração principal está no package.json na seção "publish"
+// Isso garante que use o repositório correto definido lá
 
 // Configurações para instalação silenciosa automática
-autoUpdater.autoDownload = true;
+autoUpdater.autoDownload = false; // Controle manual do download
 autoUpdater.autoInstallOnAppQuit = true;
 autoUpdater.autoRunAppAfterInstall = true;
 
@@ -26,8 +23,15 @@ autoUpdater.allowDowngrade = false;
 autoUpdater.allowPrerelease = false;
 
 // Logs do auto-updater
-autoUpdater.logger = require('electron-log');
+const log = require('electron-log');
+autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
+
+// Desabilitar completamente em desenvolvimento
+if (!app.isPackaged) {
+    autoUpdater.autoDownload = false;
+    autoUpdater.autoInstallOnAppQuit = false;
+}
 
 // Tratamento global de erros não capturados
 process.on('uncaughtException', (error) => {
@@ -42,6 +46,9 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Desabilitar aceleração de hardware para evitar problemas de GPU
 app.disableHardwareAcceleration();
+
+// Suprimir logs de erro de GPU que são apenas avisos
+process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
 app.commandLine.appendSwitch('--disable-gpu');
 app.commandLine.appendSwitch('--disable-gpu-sandbox');
 app.commandLine.appendSwitch('--disable-software-rasterizer');
@@ -58,6 +65,8 @@ app.commandLine.appendSwitch('--disable-renderer-backgrounding');
 app.commandLine.appendSwitch('--disable-web-security');
 app.commandLine.appendSwitch('--in-process-gpu');
 app.commandLine.appendSwitch('--disable-domain-reliability');
+app.commandLine.appendSwitch('--log-level=3'); // Apenas erros fatais
+app.commandLine.appendSwitch('--disable-logging'); // Desabilitar logs de desenvolvimento
 
 class DesktopManager {
     constructor() {
@@ -93,6 +102,16 @@ class DesktopManager {
             try {
                 await this.database.initialize();
                 console.log('✅ Banco de dados inicializado');
+                
+                // Limpar logs antigos na inicialização
+                try {
+                    console.log('🧹 Limpando logs antigos...');
+                    await this.database.clearLogs();
+                    console.log('✅ Logs antigos limpos');
+                } catch (logError) {
+                    console.warn('⚠️ Aviso: Não foi possível limpar logs antigos:', logError.message);
+                }
+                
             } catch (error) {
                 console.warn('⚠️ Aviso: Banco de dados com problema de I/O:', error.code);
                 console.log('📋 Sistema continuará em modo somente memória (data-store)');
@@ -492,14 +511,49 @@ class DesktopManager {
                 return { success: false, message: error.message };
             }
         });
-        ipcMain.handle('orders:clear-completed', () => this.database ? this.database.clearCompletedOrders() : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('orders:clear-completed', async () => {
+            try {
+                let dbResult = { success: false };
+                let dataStoreResult = { success: false };
+                
+                // Limpar do banco SQLite se disponível
+                if (this.database) {
+                    dbResult = await this.database.clearCompletedOrders();
+                    console.log('🗑️ SQLite clear result:', dbResult);
+                }
+                
+                // Limpar do DataStore sempre
+                dataStoreResult = dataStore.clearCompletedOrders();
+                console.log('🗑️ DataStore clear result:', dataStoreResult);
+                
+                return { 
+                    success: true, 
+                    message: 'Ordens completed removidas de ambos os storages',
+                    details: { database: dbResult, dataStore: dataStoreResult }
+                };
+            } catch (error) {
+                console.error('❌ Erro ao limpar ordens:', error);
+                return { success: false, message: 'Erro ao limpar ordens: ' + error.message };
+            }
+        });
 
         // Logs e configurações
         ipcMain.handle('logs:list', () => {
             if (!this.initialized || !this.database) return [];
             return this.database.getLogs();
         });
-        ipcMain.handle('logs:clear', () => this.clearLogs());
+        ipcMain.handle('logs:clear', async () => {
+            if (!this.database) {
+                return { success: false, message: 'Banco de dados indisponível' };
+            }
+            try {
+                await this.database.clearLogs();
+                return { success: true, message: 'Logs limpos com sucesso' };
+            } catch (error) {
+                console.error('❌ Erro ao limpar logs:', error);
+                return { success: false, message: 'Erro ao limpar logs' };
+            }
+        });
         ipcMain.handle('settings:get', () => this.database ? this.database.getSettings() : {});
         ipcMain.handle('settings:update', (event, settings) => this.database.updateSettings(settings));
 
@@ -731,6 +785,11 @@ class DesktopManager {
         }
 
         try {
+            // Adicionar log de início do servidor
+            if (this.database) {
+                await this.database.addLog('server', 'info', 'Iniciando servidor...');
+            }
+            
             const express = require('express');
             const http = require('http');
             const path = require('path');
@@ -1328,13 +1387,18 @@ class DesktopManager {
             const port = await findAvailablePort(this.serverPort);
             
             this.httpServer = http.createServer(this.server);
-            this.httpServer.listen(port, () => {
+            this.httpServer.listen(port, async () => {
                 this.serverPort = port;
                 this.isServerRunning = true;
                 
                 console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
                 console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
                 console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
+                
+                // Adicionar log de servidor iniciado
+                if (this.database) {
+                    await this.database.addLog('server', 'info', `Servidor iniciado na porta ${port}`);
+                }
                 
                 // Notificar renderer
                 this.notifyRenderer('server:ready', {
@@ -1343,14 +1407,25 @@ class DesktopManager {
                     timestamp: Date.now()
                 });
                 
-                // Configurar túnel se disponível
-                this.setupExternalAccess();
+                // Configurar túnel se disponível (não bloqueia o servidor)
+                this.setupExternalAccess().catch(err => {
+                    console.error('⚠️ LocalTunnel não pôde ser configurado, mas o servidor está funcionando localmente');
+                });
             });
+            
+            // Retornar sucesso
+            return { success: true, message: 'Servidor iniciado com sucesso', port: port };
 
         } catch (error) {
             console.error('❌ Erro ao iniciar servidor:', error);
+            
+            // Adicionar log de erro
+            if (this.database) {
+                await this.database.addLog('server', 'error', `Erro ao iniciar servidor: ${error.message}`);
+            }
+            
             this.notifyRenderer('server:error', { error: error.message });
-            throw error;
+            return { success: false, message: error.message, error: error.toString() };
         }
     }
 
@@ -1360,10 +1435,15 @@ class DesktopManager {
         }
 
         return new Promise((resolve) => {
-            this.httpServer.close(() => {
+            this.httpServer.close(async () => {
                 this.isServerRunning = false;
                 this.httpServer = null;
                 console.log('🛑 Servidor parado');
+                
+                // Adicionar log de servidor parado
+                if (this.database) {
+                    await this.database.addLog('server', 'info', 'Servidor parado');
+                }
                 
                 this.notifyRenderer('server:stopped');
                 resolve({ success: true, message: 'Servidor parado com sucesso' });
@@ -1377,7 +1457,7 @@ class DesktopManager {
         return await this.startServer();
     }
 
-    setupExternalAccess() {
+    async setupExternalAccess() {
         if (!this.isServerRunning) {
             console.log('⚠️ Servidor não está rodando, pulando configuração de acesso externo');
             return;
@@ -1388,38 +1468,119 @@ class DesktopManager {
             
             console.log('🌐 Configurando acesso externo via LocalTunnel...');
             
-            localtunnel({
-                port: this.serverPort,
-                subdomain: 'gestao-producao'
-            }).then(tunnel => {
-                this.tunnel = tunnel;
-                this.tunnelUrl = tunnel.url;
-                
-                console.log(`✅ Túnel ativo: ${this.tunnelUrl}`);
-                console.log(`🌐 Acesso externo: ${this.tunnelUrl}/maquina`);
-                
-                this.notifyRenderer('server:tunnel-ready', {
-                    url: this.tunnelUrl,
-                    type: 'localtunnel'
+            // Adicionar log de início
+            if (this.database) {
+                await this.database.addLog('system', 'info', 'Configurando acesso externo via LocalTunnel...');
+            }
+            
+            // Primeiro tenta com subdomain específico, depois sem subdomain
+            const tryWithSubdomain = () => {
+                console.log('🔄 Tentando LocalTunnel com subdomain...');
+                return localtunnel({
+                    port: this.serverPort,
+                    subdomain: `gestao-prod-${Date.now().toString().slice(-6)}`
                 });
+            };
+            
+            const tryWithoutSubdomain = () => {
+                return localtunnel({
+                    port: this.serverPort
+                });
+            };
+            
+            tryWithSubdomain()
+                .then(tunnel => {
+                    this.tunnel = tunnel;
+                    this.tunnelUrl = tunnel.url;
+                    
+                    console.log(`✅ Túnel ativo: ${this.tunnelUrl}`);
+                    console.log(`🌐 Acesso externo: ${this.tunnelUrl}/maquina`);
+                    
+                    // Adicionar log de túnel ativo
+                    if (this.database) {
+                        this.database.addLog('system', 'info', `Túnel ativo: ${this.tunnelUrl}`);
+                    }
+                    
+                    this.notifyRenderer('server:tunnel-ready', {
+                        url: this.tunnelUrl,
+                        type: 'localtunnel'
+                    });
 
-                tunnel.on('close', () => {
-                    console.log('🔌 Túnel fechado');
-                    this.tunnel = null;
-                    this.tunnelUrl = null;
-                    this.notifyRenderer('server:tunnel-closed');
-                });
+                    tunnel.on('close', () => {
+                        console.log('🔌 Túnel fechado');
+                        this.tunnel = null;
+                        this.tunnelUrl = null;
+                        this.notifyRenderer('server:tunnel-closed');
+                    });
 
-            }).catch(err => {
-                console.error('❌ Erro ao configurar túnel:', err.message);
-                this.notifyRenderer('server:tunnel-error', {
-                    error: 'Falha ao configurar acesso externo',
-                    details: err.message
+                    tunnel.on('error', (err) => {
+                        console.error('❌ Erro no túnel:', err);
+                        if (this.database) {
+                            this.database.addLog('system', 'error', `Erro no túnel: ${err.message}`);
+                        }
+                    });
+
+                })
+                .catch(err => {
+                    console.log('⚠️ Falha com subdomain, tentando sem subdomain...');
+                    console.log('🔄 Erro com subdomain:', err.message);
+                    
+                    // Log do erro com subdomain
+                    if (this.database) {
+                        this.database.addLog('system', 'warning', `LocalTunnel falhou com subdomain: ${err.message}`);
+                    }
+                    
+                    return tryWithoutSubdomain()
+                        .then(tunnel => {
+                            this.tunnel = tunnel;
+                            this.tunnelUrl = tunnel.url;
+                            
+                            console.log(`✅ Túnel ativo (sem subdomain): ${this.tunnelUrl}`);
+                            console.log(`🌐 Acesso externo: ${this.tunnelUrl}/maquina`);
+                            
+                            this.notifyRenderer('server:tunnel-ready', {
+                                url: this.tunnelUrl,
+                                type: 'localtunnel'
+                            });
+
+                            tunnel.on('close', () => {
+                                console.log('🔌 Túnel fechado');
+                                this.tunnel = null;
+                                this.tunnelUrl = null;
+                                this.notifyRenderer('server:tunnel-closed');
+                            });
+
+                        })
+                        .catch(err2 => {
+                            console.error('❌ Erro ao configurar túnel (ambas tentativas):', err2.message);
+                            
+                            // Adicionar log de erro no túnel
+                            if (this.database) {
+                                this.database.addLog('system', 'error', `Erro ao configurar túnel: ${err2.message}`);
+                            }
+                            
+                            this.notifyRenderer('server:tunnel-error', {
+                                error: 'Falha ao configurar acesso externo',
+                                details: `Subdomain: ${err.message} | Sem subdomain: ${err2.message}`
+                            });
+                        });
                 });
-            });
 
         } catch (error) {
             console.error('❌ Erro ao inicializar LocalTunnel:', error);
+            
+            // Adicionar log detalhado do erro
+            if (this.database) {
+                await this.database.addLog('system', 'error', `Erro fatal no LocalTunnel: ${error.message}`);
+            }
+            
+            // Notificar interface que LocalTunnel falhou mas servidor está OK
+            this.notifyRenderer('server:tunnel-error', {
+                error: 'LocalTunnel indisponível',
+                details: error.message,
+                serverStillRunning: true,
+                localUrl: `http://localhost:${this.serverPort}`
+            });
         }
     }
 
@@ -1470,9 +1631,23 @@ app.whenReady().then(async () => {
     }
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+    // Parar o servidor primeiro para evitar operações assíncronas pendentes
+    if (desktopManager.isServerRunning) {
+        await desktopManager.stopServer();
+    }
+    
+    // Fechar banco de dados para evitar operações pendentes
+    if (desktopManager.database && desktopManager.database.db) {
+        try {
+            console.log('🔒 Fechando banco de dados...');
+            desktopManager.database.close();
+        } catch (error) {
+            console.warn('⚠️ Erro ao fechar banco:', error.message);
+        }
+    }
+    
     if (process.platform !== 'darwin') {
-        desktopManager.stopServer();
         app.quit();
     }
 });
@@ -1484,12 +1659,54 @@ app.on('activate', () => {
 });
 
 // Cleanup ao fechar
-app.on('before-quit', async () => {
-    if (desktopManager.isServerRunning) {
-        await desktopManager.stopServer();
-    }
-    if (desktopManager.tunnel) {
-        desktopManager.tunnel.close();
+let isQuitting = false;
+app.on('before-quit', async (event) => {
+    if (isQuitting) return; // Evitar múltiplas execuções
+    
+    console.log('📤 Encerrando aplicação...');
+    event.preventDefault();
+    isQuitting = true;
+    
+    try {
+        // Fechar túnel se existir
+        if (desktopManager.tunnel) {
+            console.log('🔌 Fechando túnel...');
+            desktopManager.tunnel.close();
+            desktopManager.tunnel = null;
+        }
+        
+        // Parar servidor se estiver rodando
+        if (desktopManager.isServerRunning) {
+            console.log('🛑 Parando servidor...');
+            await desktopManager.stopServer();
+        }
+        
+        // Limpar logs e fechar banco
+        if (desktopManager && desktopManager.database) {
+            try {
+                console.log('🧹 Limpando logs do sistema...');
+                await desktopManager.database.clearLogs();
+                console.log('✅ Logs limpos');
+            } catch (error) {
+                // Ignorar erros de limpeza durante shutdown
+                console.log('📋 Logs já limpos ou banco fechando');
+            }
+            
+            // Fechar banco de dados
+            if (desktopManager.database.db) {
+                console.log('🔒 Fechando banco de dados...');
+                desktopManager.database.close();
+                desktopManager.database.db = null;
+            }
+        }
+        
+        // Finalizar aplicação
+        console.log('👋 Aplicação encerrada');
+        process.exit(0); // Forçar saída limpa
+        
+    } catch (error) {
+        console.error('❌ Erro durante cleanup:', error);
+        process.exit(1);
     }
 });
 

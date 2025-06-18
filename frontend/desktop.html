@@ -137,16 +137,23 @@
             border-radius: 20px;
             font-size: 14px;
             font-weight: 500;
+            color: #000000 !important;
+        }
+        
+        .status-item span {
+            color: #000000 !important;
         }
 
         .status-online {
-            background: #e8f5e8;
-            color: #000000;
+            background: #4CAF50;  /* Verde sólido */
+            color: #000000 !important;
+            border: 2px solid #45a049;
         }
 
         .status-offline {
-            background: #ffebee;
-            color: #000000;
+            background: #f44336;  /* Vermelho sólido */
+            color: #000000 !important;
+            border: 2px solid #d32f2f;
         }
 
         .status-pending {
@@ -1587,7 +1594,7 @@
                     const sortedLogs = logs.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
                     logsContainer.innerHTML = sortedLogs.slice(0, 50).map(log => `
                         <div class="log-entry">
-                            <span class="log-timestamp">[${new Date(log.timestamp).toLocaleString()}]</span>
+                            <span class="log-timestamp">[${log.created_at ? new Date(log.created_at).toLocaleString('pt-BR') : log.timestamp ? new Date(log.timestamp).toLocaleString('pt-BR') : new Date().toLocaleString('pt-BR')}]</span>
                             <span class="log-level-${log.level}">${log.level.toUpperCase()}</span>
                             ${log.message}
                         </div>

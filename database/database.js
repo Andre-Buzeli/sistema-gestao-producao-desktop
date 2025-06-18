@@ -505,9 +505,23 @@ class Database {
     }
 
     async clearLogs() {
-        const result = await this.runQuery('DELETE FROM logs');
-        await this.addLog('system', 'info', 'Logs limpos');
-        return result;
+        try {
+            // Verificar se o banco ainda está aberto
+            if (!this.db) {
+                console.log('📋 Banco já fechado, pulando limpeza de logs');
+                return { success: true, message: 'Banco já fechado' };
+            }
+            
+            const result = await this.runQuery('DELETE FROM logs');
+            // Não adicionar log aqui para evitar recursão durante shutdown
+            return result;
+        } catch (error) {
+            if (error.code === 'SQLITE_MISUSE') {
+                console.log('📋 Banco já em processo de fechamento');
+                return { success: true, message: 'Banco em fechamento' };
+            }
+            throw error;
+        }
     }
 
     // Métodos para configurações

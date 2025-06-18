@@ -102,38 +102,8 @@ function initializeDefaultProducts() {
         { id: 'gn_9', name: 'GUARD 14X14 BRASILEIRINHO', category: 'GN' }
     ];
     
-    // Adicionar algumas ordens de exemplo para teste
-    console.log('📋 Adicionando ordens de exemplo...');
-    productStore.orders = {
-        'ORD001': {
-            code: 'ORD001',
-            products: [
-                { id: 'pt_1', name: 'PT LEVE', category: 'PT', counter: 5, totalWeight: 2.5 },
-                { id: 'ph_1', name: 'PH ESSENCE', category: 'PH', counter: 3, totalWeight: 1.8 }
-            ],
-            timestamp: new Date().toISOString(),
-            terminal: 'maquina',
-            operator: 'Sistema',
-            status: 'completed',
-            createdAt: Date.now() - 86400000, // 1 dia atrás
-            updatedAt: Date.now(),
-            totalWeight: 4.3
-        },
-        'ORD002': {
-            code: 'ORD002',
-            products: [
-                { id: 'tb_1', name: 'TB LEVE', category: 'TB', counter: 10, totalWeight: 5.2 }
-            ],
-            timestamp: new Date().toISOString(),
-            terminal: 'tablet',
-            operator: 'Operador1', 
-            status: 'completed',
-            createdAt: Date.now() - 43200000, // 12 horas atrás
-            updatedAt: Date.now(),
-            totalWeight: 5.2
-        }
-    };
-    console.log('✅ Ordens de exemplo adicionadas');
+    // Inicializar sem ordens de exemplo
+    productStore.orders = {};
 }
 
 // Função para salvar produtos em arquivo
@@ -351,6 +321,29 @@ function removeOrder(orderCode) {
 }
 
 /**
+ * Remove todas as ordens com status 'completed'
+ * @returns {Object} - Resultado da operação
+ */
+function clearCompletedOrders() {
+    let removedCount = 0;
+    
+    // Percorre todas as ordens e remove as que têm status 'completed'
+    for (const orderCode in productStore.orders) {
+        const order = productStore.orders[orderCode];
+        if (order.status === 'completed') {
+            delete productStore.orders[orderCode];
+            removedCount++;
+        }
+    }
+    
+    // Atualiza o timestamp
+    productStore.lastUpdate = Date.now();
+    
+    console.log(`🗑️ DataStore: ${removedCount} ordens completed removidas`);
+    return { success: true, removedCount, message: `${removedCount} ordens completed removidas do DataStore` };
+}
+
+/**
  * Obtém o timestamp da última atualização
  * @returns {number} - Timestamp da última atualização
  */
@@ -370,6 +363,7 @@ module.exports = {
     getOrder,
     getAllOrders,
     removeOrder,
+    clearCompletedOrders,
     getLastUpdate,
     saveProductsToFile,
     loadProductsFromFile

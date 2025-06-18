@@ -1,0 +1,65 @@
+appId: com.gestao.producao.desktop
+productName: Sistema de Gestão de Produção
+copyright: Copyright © 2025 Sistema de Gestão
+
+# Configuração do auto-updater
+publish:
+  - provider: github
+    owner: Andre-Buzeli
+    repo: sistema-gestao-producao-desktop
+    releaseType: release
+    private: false
+
+# Diretórios
+directories:
+  output: dist
+  buildResources: build
+
+# Arquivos para incluir no build
+files:
+  - main.js
+  - preload.js
+  - frontend/**/*
+  - backend/**/*
+  - database/**/*
+  - "!**/*.map"
+  - "!**/node_modules/.cache"
+  - "!**/node_modules/electron/**"
+  - "!**/node_modules/@electron/**"
+
+# Recursos extras
+extraResources:
+  - from: database/
+    to: database/
+    filter:
+      - "**/*"
+
+# Configuração para Windows
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  requestedExecutionLevel: asInvoker
+  forceCodeSigning: false
+  signAndEditExecutable: false
+
+# Configuração do instalador NSIS
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  displayLanguageSelector: true
+  perMachine: false
+  runAfterFinish: true
+  deleteAppDataOnUninstall: false
+  warningsAsErrors: false
+  installerIcon: build/icon.ico
+  uninstallerIcon: build/icon.ico
+  artifactName: ${productName} Setup ${version}.exe
+
+# Configuração da versão portátil
+portable:
+  artifactName: ${productName}-${version}-portable.exe 

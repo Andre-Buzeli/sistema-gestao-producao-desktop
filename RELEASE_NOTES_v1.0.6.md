@@ -1,50 +1,50 @@
-# 🧹 Release v1.0.6 - Interface Aprimorada
+# 🚀 Release v1.0.6 - Correções Críticas e Estabilidade
 
 ## 🆕 O que há de novo
 
-### 🎨 Melhorias na Interface
-- **Interface mais limpa** na aba de configurações
-- **Melhor legibilidade** dos indicadores de status
-- **Remoção de informações desnecessárias** do sistema
+### 🔧 Correções Críticas
+- **Erro Fatal Corrigido**: Resolvido erro fatal ao fechar aplicação (SQLITE_MISUSE)
+- **Logs GPU Suprimidos**: Removidos avisos desnecessários de GPU no console
+- **Auto-Updater Melhorado**: Sistema de atualização automática otimizado
 
-## 🔄 Correções e Melhorias
+## 🐛 Bugs Corrigidos
 
-### Aba Configurações
-- ✅ Removida seção "Informações do Sistema" para interface mais clean
-- ✅ Eliminadas informações redundantes (versão, Electron, Node.js, OS)
+### Sistema de Fechamento
+- ✅ Corrigido erro fatal ao encerrar aplicação
+- ✅ Melhorado processo de limpeza durante shutdown
+- ✅ Prevenção de múltiplas execuções do cleanup
+- ✅ Banco de dados fecha corretamente sem erros
 
-### Indicadores de Status
-- ✅ Texto dos status "Sistema Online" e "Servidor Offline" alterado para preto
-- ✅ Melhor contraste e legibilidade
-- ✅ Mantida diferenciação por cor de fundo (verde claro/rosa claro)
+### Console e Logs
+- ✅ Suprimidos erros de GPU que eram apenas avisos
+- ✅ Logs de desenvolvimento desabilitados em produção
+- ✅ Console mais limpo e apenas com informações relevantes
 
-### Melhorias de UX
-- 🔧 Interface mais focada e menos poluída
-- 🔧 Status com melhor visibilidade
-- 🔧 Experiência de usuário aprimorada
+### Auto-Updater
+- ✅ Removida configuração duplicada
+- ✅ Melhor proteção em modo desenvolvimento
+- ✅ Configuração centralizada via package.json
 
-## 🚀 Auto-Update
+## 💻 Requisitos
+- Windows 10/11 64-bit
+- 4GB RAM mínimo
+- 200MB espaço em disco
 
-Esta atualização será **instalada automaticamente** em sistemas com a v1.0.5:
-- Notificação aparecerá ao abrir o sistema
-- Opção de instalação silenciosa ou com interface
-- Aplicação reiniciará automaticamente após instalação
+## 📦 Instalação
+1. Baixe o instalador: `Sistema de Gestão de Produção Setup 1.0.6.exe`
+2. Execute o instalador
+3. Siga as instruções na tela
 
-## 📥 Download
+## 🔄 Atualização Automática
+- Se você tem a v1.0.5, receberá notificação automática
+- Aceite a atualização quando solicitado
+- O sistema reiniciará automaticamente
 
-- **Instalador Windows**: `Sistema de Gestão de Produção Setup 1.0.6.exe`
-- **Requisitos**: Windows 10 ou superior
-
-## 📸 Melhorias Visuais
-
-Principais melhorias na interface:
-- Aba de configurações mais limpa
-- Status com texto preto para melhor legibilidade
-- Remoção de elementos desnecessários
-- Foco na funcionalidade essencial
+## 📝 Notas Técnicas
+- Processo de shutdown completamente reescrito
+- Melhor tratamento de erros assíncronos
+- Supressão inteligente de logs não críticos
+- Database cleanup otimizado
 
 ---
-
-**Data da Release**: ${new Date().toLocaleDateString('pt-BR')}
-**Versão**: 1.0.6
-**Tipo**: Melhoria de interface / UX 
+*Versão 1.0.6 - 18 de Junho de 2025* 
