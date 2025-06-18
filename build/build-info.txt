@@ -1,0 +1,32 @@
+SISTEMA DE GESTÃO DE PRODUÇÃO - BUILD INFORMATION
+=================================================
+
+Para criar um executável Windows completo:
+
+1. ÍCONE PERSONALIZADO:
+   - Substitua build/icon.ico por um ícone real (.ico)
+   - Tamanhos: 16x16, 32x32, 48x48, 128x128, 256x256 pixels
+   - Use ferramentas como GIMP, Photoshop, ou online converters
+
+2. BUILD COMMANDS:
+   npm run build-win        # Criar instalador + portable
+   npm run build           # Build para todas as plataformas
+
+3. ARQUIVOS GERADOS:
+   dist/
+   ├── Sistema de Gestão de Produção Setup 1.0.0.exe (Instalador)
+   ├── Sistema de Gestão de Produção-1.0.0-portable.exe (Portável)
+   └── win-unpacked/ (Arquivos descompactados)
+
+4. PARA DISTRIBUIÇÃO PROFISSIONAL:
+   - Adicione assinatura digital (code signing certificate)
+   - Configure auto-updater para atualizações automáticas
+   - Implemente sistema de logs estruturado
+   - Adicione backup automático do banco de dados
+
+5. MELHORIAS FUTURAS:
+   - Auto-updater (electron-updater)
+   - Logs com winston
+   - Backup automático
+   - Configurações avançadas
+   - Documentação completa 

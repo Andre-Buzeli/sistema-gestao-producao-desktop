@@ -1,0 +1,1391 @@
+/* Estilos responsivos para o Sistema de Gestão de Produção */
+
+/* Variáveis CSS para facilitar a manutenção */
+:root {
+    --primary-color: #3498db;
+    --primary-dark: #2980b9;
+    --secondary-color: #2ecc71;
+    --text-color: #2c3e50;
+    --light-text: #7f8c8d;
+    --background-color: #f5f5f5;
+    --card-background: #ffffff;
+    --border-color: #e0e0e0;
+    --shadow-color: rgba(0, 0, 0, 0.1);
+    --header-height: 60px;
+    --footer-height: 70px;
+}
+
+/* Estilos globais para forçar fundo branco */
+body {
+    background-color: #f5f5f5 !important;
+    color: #2c3e50 !important;
+}
+
+/* Esconde o botão de escanear na tela inicial */
+.camera-scan-button {
+    display: none !important;
+}
+
+/* Estilos base para todos os dispositivos */
+.container {
+    max-width: 100%;
+    margin: 0 auto;
+    overflow-x: hidden;
+}
+
+/* Ajustes para a grade de produtos - sempre mantém 3 colunas */
+.products-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(clamp(100px, 25vw, 200px), 1fr));
+    gap: clamp(8px, 2vw, 20px);
+    padding: clamp(10px, 3vw, 20px);
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    overflow-y: auto;
+    padding-top: 10px; /* Reduz o espaço acima dos cards */
+}
+
+/* Override para manter sempre 3 colunas em tablets e acima */
+@media (min-width: 481px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* 1 coluna apenas em celulares muito pequenos */
+@media (max-width: 380px) {
+    .products-grid {
+        grid-template-columns: 1fr;
+        gap: clamp(10px, 3vw, 15px);
+    }
+}
+
+/* Melhorias de densidade para telas de alta densidade (Retina, etc.) */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+    .product-icon {
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+    }
+    
+    .product-name {
+        text-shadow: 0 0.5px 1px rgba(255, 255, 255, 0.9);
+    }
+}
+
+/* Modo escuro temporariamente desabilitado para debug */
+/*
+@media (prefers-color-scheme: dark) {
+    .product-card {
+        background: linear-gradient(135deg, rgba(45, 55, 72, 0.9) 0%, rgba(55, 65, 81, 0.8) 50%, rgba(65, 75, 90, 0.7) 100%);
+        box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 2px 5px rgba(0, 0, 0, 0.15);
+    }
+    
+    .product-name {
+        color: #f7fafc;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+    }
+    
+    .product-icon {
+        color: #63b3ed;
+        filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+    }
+}
+*/
+
+/* Melhorias para motion reduce (acessibilidade) */
+@media (prefers-reduced-motion: reduce) {
+    .product-card,
+    .product-icon,
+    .product-name {
+        transition: none;
+    }
+    
+    .product-card:hover {
+        transform: none;
+    }
+}
+
+/* Ajustes específicos para iPhone SE e dispositivos similares */
+@media only screen 
+    and (device-width: 375px) 
+    and (device-height: 667px) 
+    and (-webkit-device-pixel-ratio: 2) {
+    
+    .product-card {
+        height: clamp(160px, 20vw, 180px);
+    }
+    
+    .product-icon {
+        font-size: clamp(40px, 6vw, 55px);
+    }
+    
+    .product-name {
+        font-size: clamp(12px, 2.2vw, 16px);
+    }
+}
+
+/* Ajustes para tablets em modo paisagem */
+@media only screen 
+    and (min-device-width: 768px) 
+    and (max-device-width: 1024px) 
+    and (orientation: landscape) {
+    
+    .products-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+    
+    .product-card {
+        height: clamp(180px, 15vw, 200px);
+    }
+}
+
+/* Ajustes específicos para iPad */
+@media only screen 
+    and (min-device-width: 768px) 
+    and (max-device-width: 1024px) 
+    and (-webkit-min-device-pixel-ratio: 2) {
+    
+    .product-icon {
+        font-size: clamp(50px, 6vw, 75px);
+    }
+    
+    .product-name {
+        font-size: clamp(14px, 2vw, 18px);
+    }
+}
+
+/* Melhorias para telas touch */
+@media (pointer: coarse) {
+    .product-card {
+        min-height: 120px; /* Garante área mínima tocável */
+        padding: clamp(8px, 2vw, 12px);
+    }
+    
+    /* Aumenta ligeiramente os elementos em dispositivos touch */
+    .product-icon {
+        font-size: clamp(45px, 7vw, 100px);
+    }
+    
+    .product-name {
+        font-size: clamp(13px, 2.3vw, 20px);
+    }
+}
+
+/* Sistema de breakpoints customizados mais granulares */
+@media (max-width: 320px) {
+    /* Dispositivos muito pequenos */
+    .product-card {
+        height: clamp(140px, 25vw, 160px);
+    }
+}
+
+@media (min-width: 321px) and (max-width: 480px) {
+    /* Smartphones padrão */
+    .products-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+    /* Smartphones grandes e tablets pequenos */
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (min-width: 1200px) {
+    /* Desktops e tablets grandes */
+    .products-grid {
+        grid-template-columns: repeat(4, 1fr);
+        max-width: 1400px;
+    }
+}
+
+/* Ajustes para o modal de produto */
+.modal-content {
+    width: 95%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Ajustes para a tela de leitura de código de barras */
+.order-reader {
+    width: 95%;
+    max-width: 800px;
+    max-height: 95vh;
+}
+
+/* Ajustes para o botão de concluir fixo */
+.finish-button-container {
+    padding: 10px;
+}
+
+.finish-button {
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Media Queries para diferentes tamanhos de tela */
+
+/* Desktops e laptops grandes */
+@media (min-width: 1200px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .product-card {
+        height: 250px;
+    }
+
+    .product-icon {
+        font-size: 100px;
+    }
+
+    .product-name {
+        font-size: 22px;
+    }
+}
+
+/* Tablets e laptops */
+@media (min-width: 768px) and (max-width: 1199px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .product-card {
+        height: 220px;
+    }
+
+    .product-icon {
+        font-size: 80px;
+    }
+
+    .product-name {
+        font-size: 18px;
+    }
+
+    /* Ajuste para o card de leitura de ordem em tablets */
+    .order-reader {
+        margin-top: 10px !important; /* Margem reduzida em tablets */
+    }
+
+    /* Reduz o tamanho do cabeçalho do card em tablets */
+    .order-card-header {
+        padding: 12px;
+    }
+
+    .order-card-header h2 {
+        font-size: 22px;
+    }
+
+    .order-header-icon {
+        font-size: 24px;
+    }
+}
+
+/* Tablets pequenos e celulares grandes */
+@media (min-width: 481px) and (max-width: 767px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr); /* Mantém 3 colunas */
+        gap: 10px; /* Reduz o espaçamento */
+        padding: 10px; /* Reduz o padding */
+    }
+
+    .product-card {
+        height: 160px; /* Reduz a altura */
+    }
+
+    .product-icon {
+        font-size: 50px; /* Ícone menor */
+        margin-top: -10px; /* Ajusta a posição */
+    }
+
+    .product-name {
+        font-size: 14px; /* Texto menor */
+        line-height: 1.2; /* Reduz o espaçamento entre linhas */
+        margin-top: 5px; /* Aproxima do ícone */
+    }
+
+    .tab {
+        min-width: 0; /* Remove a largura mínima */
+        font-size: 14px;
+        padding: 8px 2px; /* Reduz o padding */
+    }
+
+    .tab-icon {
+        font-size: 22px;
+        margin-bottom: 4px; /* Reduz o espaço abaixo do ícone */
+    }
+
+    .form-input {
+        padding: 12px 12px 12px 40px;
+    }
+
+    .input-icon {
+        font-size: 18px;
+    }
+
+    .modal-content {
+        padding: 15px;
+    }
+
+    .modal-title {
+        font-size: 22px;
+    }
+
+    .form-buttons {
+        flex-direction: column;
+    }
+
+    .form-button {
+        margin: 5px 0;
+    }
+}
+
+/* Celulares */
+@media (max-width: 480px) {
+    header {
+        padding: 5px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: nowrap; /* Impede que os elementos quebrem para a próxima linha */
+        position: relative; /* Para posicionamento absoluto dos elementos */
+    }
+
+    .header-title {
+        font-size: 16px;
+        white-space: nowrap; /* Impede que o texto quebre em várias linhas */
+        overflow: hidden; /* Esconde o texto que ultrapassar */
+        text-overflow: ellipsis; /* Adiciona reticências ao texto cortado */
+        max-width: 60%; /* Limita a largura do título */
+        text-align: center; /* Centraliza o texto */
+    }
+
+    .icon {
+        font-size: 24px;
+        margin-right: 5px; /* Reduz a margem */
+        flex-shrink: 0; /* Impede que o ícone encolha */
+    }
+
+    .connection-status {
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        padding: 3px 5px;
+    }
+
+    .connection-status i {
+        font-size: 16px;
+        margin-right: 3px;
+    }
+
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr); /* Mantém 3 colunas */
+        gap: 5px; /* Reduz ainda mais o espaçamento */
+        padding: 5px; /* Reduz o padding */
+    }
+
+    .product-card {
+        height: 120px; /* Reduz bastante a altura */
+        border-radius: 10px; /* Bordas menos arredondadas */
+    }
+
+    .product-icon {
+        font-size: 40px; /* Ícone bem menor */
+        margin-top: 10px; /* Ajusta a posição para cima */
+    }
+
+    .product-name {
+        font-size: 12px; /* Texto ainda menor */
+        line-height: 1.1; /* Reduz mais o espaçamento entre linhas */
+        margin-top: 5px; /* Adiciona um pequeno espaço acima do texto */
+        padding: 0 2px; /* Reduz o padding lateral */
+        position: relative; /* Permite ajustar a posição */
+        top: -5px; /* Move o texto para cima */
+    }
+
+    .tab {
+        min-width: 70px;
+        padding: 8px 5px;
+        font-size: 12px;
+    }
+
+    .tab-icon {
+        font-size: 20px;
+    }
+
+    .form-input {
+        padding: 10px 10px 10px 35px;
+        font-size: 14px;
+    }
+
+    .input-icon {
+        font-size: 16px;
+        left: 10px;
+        top: 12px;
+    }
+
+    .modal-content {
+        padding: 10px;
+        width: 98%;
+    }
+
+    .modal-title {
+        font-size: 18px;
+    }
+
+    .form-buttons {
+        flex-direction: column;
+    }
+
+    .form-button {
+        margin: 5px 0;
+    }
+
+    .finish-button {
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .finish-button i {
+        font-size: 18px;
+    }
+
+    .order-reader {
+        width: 98%;
+        margin-top: 10px !important; /* Margem reduzida em celulares */
+        max-height: 85vh; /* Limita a altura para não sobrepor o cabeçalho */
+    }
+
+    .order-card-header h2 {
+        font-size: 20px;
+    }
+
+    .order-header-icon {
+        font-size: 24px;
+    }
+
+    .order-card-content {
+        padding: 15px;
+        padding-top: 10px; /* Reduz ainda mais o padding superior */
+    }
+
+    /* Ajusta o espaçamento entre elementos para celulares */
+    .icon-container {
+        margin-bottom: 10px;
+        margin-top: 5px;
+    }
+
+    .order-instructions {
+        margin-bottom: 10px;
+        margin-top: -5px;
+    }
+
+    .icon-container {
+        width: 200px;
+        height: 200px;
+    }
+
+    .barcode-icon {
+        width: 150px;
+        height: 150px;
+    }
+
+    .order-instructions {
+        font-size: 14px;
+    }
+
+    .input-row input {
+        font-size: 14px;
+    }
+
+    .camera-scan-button {
+        padding: 10px 15px;
+        font-size: 14px;
+    }
+
+    .read-button {
+        padding: 12px 20px;
+        font-size: 16px;
+    }
+
+    .read-button i {
+        font-size: 18px;
+    }
+
+    /* Melhorias para toque em dispositivos móveis */
+    button, .tab, .product-card, input[type="text"], input[type="number"] {
+        touch-action: manipulation; /* Previne delay de 300ms em dispositivos touch */
+    }
+
+    /* Aumenta área de toque para elementos interativos */
+    .tab, button, .product-card, .form-input {
+        min-height: 44px; /* Tamanho mínimo recomendado para alvos de toque */
+    }
+
+    /* Melhora a experiência de formulários em dispositivos móveis */
+    input, select, textarea {
+        -webkit-appearance: none; /* Remove estilo padrão em iOS */
+        border-radius: 0; /* Evita bordas arredondadas em iOS */
+    }
+
+    /* Ajustes para quando o teclado virtual está aberto */
+    .keyboard-open .products-grid {
+        max-height: 40vh;
+    }
+
+    .keyboard-open .finish-button-container {
+        position: static;
+        box-shadow: none;
+    }
+}
+
+/* Celulares pequenos */
+@media (max-width: 360px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr); /* Mantém 3 colunas mesmo em telas muito pequenas */
+        gap: 4px; /* Espaçamento mínimo */
+        padding: 4px; /* Padding mínimo */
+    }
+
+    .product-card {
+        height: 100px; /* Altura mínima */
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1); /* Sombra mais sutil */
+    }
+
+    .product-icon {
+        font-size: 30px; /* Ícone muito pequeno */
+        margin-top: 0; /* Remove margem superior */
+        margin-bottom: 2px; /* Pequeno espaço abaixo do ícone */
+    }
+
+    .product-name {
+        font-size: 9px; /* Texto muito pequeno */
+        line-height: 1; /* Sem espaçamento entre linhas */
+        margin: 0;
+    }
+
+    .tabs {
+        height: auto;
+        min-height: 60px;
+    }
+
+    .tab {
+        min-width: 60px;
+        padding: 5px;
+        font-size: 10px;
+    }
+
+    .tab-icon {
+        font-size: 18px;
+    }
+
+    .order-reader {
+        padding: 10px;
+        margin-top: 10px !important; /* Margem reduzida em celulares pequenos */
+    }
+
+    .icon-container {
+        width: 120px; /* Reduz ainda mais o tamanho */
+        height: 120px; /* Reduz ainda mais o tamanho */
+        margin-bottom: 10px; /* Reduz o espaçamento */
+        margin-top: 0; /* Remove o espaço superior */
+    }
+
+    .barcode-icon {
+        width: 80px; /* Reduz ainda mais o tamanho */
+        height: 80px; /* Reduz ainda mais o tamanho */
+    }
+
+    .order-card-header {
+        padding: 10px; /* Reduz ainda mais o padding */
+    }
+
+    .order-card-header h2 {
+        font-size: 18px; /* Reduz ainda mais o tamanho da fonte */
+    }
+
+    .order-header-icon {
+        font-size: 20px; /* Reduz ainda mais o tamanho do ícone */
+    }
+
+    .order-card-content {
+        padding: 10px; /* Reduz ainda mais o padding */
+        padding-top: 5px; /* Reduz ainda mais o padding superior */
+    }
+
+    /* Melhorias responsivas para fontes e ícones dos cards de produtos */
+    /* Sistema de grid mais inteligente baseado no viewport */
+    .products-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(clamp(100px, 25vw, 200px), 1fr));
+        gap: clamp(8px, 2vw, 20px);
+        padding: clamp(10px, 3vw, 20px);
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        overflow-y: auto;
+        padding-top: 10px; /* Reduz o espaço acima dos cards */
+    }
+
+    /* Override para manter sempre 3 colunas em tablets e acima */
+    @media (min-width: 481px) {
+        .products-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    /* 1 coluna apenas em celulares muito pequenos */
+    @media (max-width: 380px) {
+        .products-grid {
+            grid-template-columns: 1fr;
+            gap: clamp(10px, 3vw, 15px);
+        }
+    }
+
+    /* Melhorias de densidade para telas de alta densidade (Retina, etc.) */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+        .product-icon {
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+        }
+        
+        .product-name {
+            text-shadow: 0 0.5px 1px rgba(255, 255, 255, 0.9);
+        }
+    }
+
+    /* Ajustes para modo escuro (se o sistema suportar) */
+    @media (prefers-color-scheme: dark) {
+        .product-card {
+            background: linear-gradient(135deg, rgba(45, 55, 72, 0.9) 0%, rgba(55, 65, 81, 0.8) 50%, rgba(65, 75, 90, 0.7) 100%);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3), 0 2px 5px rgba(0, 0, 0, 0.15);
+        }
+        
+        .product-name {
+            color: #f7fafc;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.3);
+        }
+        
+        .product-icon {
+            color: #63b3ed;
+            filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+        }
+    }
+
+    /* Melhorias para motion reduce (acessibilidade) */
+    @media (prefers-reduced-motion: reduce) {
+        .product-card,
+        .product-icon,
+        .product-name {
+            transition: none;
+        }
+        
+        .product-card:hover {
+            transform: none;
+        }
+    }
+
+    /* Ajustes específicos para iPhone SE e dispositivos similares */
+    @media only screen 
+        and (device-width: 375px) 
+        and (device-height: 667px) 
+        and (-webkit-device-pixel-ratio: 2) {
+        
+        .product-card {
+            height: clamp(160px, 20vw, 180px);
+        }
+        
+        .product-icon {
+            font-size: clamp(40px, 6vw, 55px);
+        }
+        
+        .product-name {
+            font-size: clamp(12px, 2.2vw, 16px);
+        }
+    }
+
+    /* Ajustes para tablets em modo paisagem */
+    @media only screen 
+        and (min-device-width: 768px) 
+        and (max-device-width: 1024px) 
+        and (orientation: landscape) {
+        
+        .products-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+        
+        .product-card {
+            height: clamp(180px, 15vw, 200px);
+        }
+    }
+
+    /* Ajustes específicos para iPad */
+    @media only screen 
+        and (min-device-width: 768px) 
+        and (max-device-width: 1024px) 
+        and (-webkit-min-device-pixel-ratio: 2) {
+        
+        .product-icon {
+            font-size: clamp(50px, 6vw, 75px);
+        }
+        
+        .product-name {
+            font-size: clamp(14px, 2vw, 18px);
+        }
+    }
+
+    /* Melhorias para telas touch */
+    @media (pointer: coarse) {
+        .product-card {
+            min-height: 120px; /* Garante área mínima tocável */
+            padding: clamp(8px, 2vw, 12px);
+        }
+        
+        /* Aumenta ligeiramente os elementos em dispositivos touch */
+        .product-icon {
+            font-size: clamp(45px, 7vw, 100px);
+        }
+        
+        .product-name {
+            font-size: clamp(13px, 2.3vw, 20px);
+        }
+    }
+
+    /* Sistema de breakpoints customizados mais granulares */
+    @media (max-width: 320px) {
+        /* Dispositivos muito pequenos */
+        .product-card {
+            height: clamp(140px, 25vw, 160px);
+        }
+    }
+
+    @media (min-width: 321px) and (max-width: 480px) {
+        /* Smartphones padrão */
+        .products-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 481px) and (max-width: 768px) {
+        /* Smartphones grandes e tablets pequenos */
+        .products-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (min-width: 1200px) {
+        /* Desktops e tablets grandes */
+        .products-grid {
+            grid-template-columns: repeat(4, 1fr);
+            max-width: 1400px;
+        }
+    }
+}
+
+/* Ajustes para o modal de produto */
+.modal-content {
+    width: 95%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 20px;
+}
+
+/* Ajustes para a tela de leitura de código de barras */
+.order-reader {
+    width: 95%;
+    max-width: 800px;
+    max-height: 95vh;
+}
+
+/* Ajustes para o botão de concluir fixo */
+.finish-button-container {
+    padding: 10px;
+}
+
+.finish-button {
+    width: 100%;
+    max-width: 500px;
+}
+
+/* Media Queries para diferentes tamanhos de tela */
+
+/* Desktops e laptops grandes */
+@media (min-width: 1200px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .product-card {
+        height: 250px;
+    }
+
+    .product-icon {
+        font-size: 100px;
+    }
+
+    .product-name {
+        font-size: 22px;
+    }
+}
+
+/* Tablets e laptops */
+@media (min-width: 768px) and (max-width: 1199px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
+    .product-card {
+        height: 220px;
+    }
+
+    .product-icon {
+        font-size: 80px;
+    }
+
+    .product-name {
+        font-size: 18px;
+    }
+
+    /* Ajuste para o card de leitura de ordem em tablets */
+    .order-reader {
+        margin-top: 10px !important; /* Margem reduzida em tablets */
+    }
+
+    /* Reduz o tamanho do cabeçalho do card em tablets */
+    .order-card-header {
+        padding: 12px;
+    }
+
+    .order-card-header h2 {
+        font-size: 22px;
+    }
+
+    .order-header-icon {
+        font-size: 24px;
+    }
+}
+
+/* Tablets pequenos e celulares grandes */
+@media (min-width: 481px) and (max-width: 767px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr); /* Mantém 3 colunas */
+        gap: 10px; /* Reduz o espaçamento */
+        padding: 10px; /* Reduz o padding */
+    }
+
+    .product-card {
+        height: 160px; /* Reduz a altura */
+    }
+
+    .product-icon {
+        font-size: 50px; /* Ícone menor */
+        margin-top: -10px; /* Ajusta a posição */
+    }
+
+    .product-name {
+        font-size: 14px; /* Texto menor */
+        line-height: 1.2; /* Reduz o espaçamento entre linhas */
+        margin-top: 5px; /* Aproxima do ícone */
+    }
+
+    .tab {
+        min-width: 0; /* Remove a largura mínima */
+        font-size: 14px;
+        padding: 8px 2px; /* Reduz o padding */
+    }
+
+    .tab-icon {
+        font-size: 22px;
+        margin-bottom: 4px; /* Reduz o espaço abaixo do ícone */
+    }
+
+    .form-input {
+        padding: 12px 12px 12px 40px;
+    }
+
+    .input-icon {
+        font-size: 18px;
+    }
+
+    .modal-content {
+        padding: 15px;
+    }
+
+    .modal-title {
+        font-size: 22px;
+    }
+
+    .form-buttons {
+        flex-direction: column;
+    }
+
+    .form-button {
+        margin: 5px 0;
+    }
+}
+
+/* Celulares */
+@media (max-width: 480px) {
+    header {
+        padding: 5px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: nowrap; /* Impede que os elementos quebrem para a próxima linha */
+        position: relative; /* Para posicionamento absoluto dos elementos */
+    }
+
+    .header-title {
+        font-size: 16px;
+        white-space: nowrap; /* Impede que o texto quebre em várias linhas */
+        overflow: hidden; /* Esconde o texto que ultrapassar */
+        text-overflow: ellipsis; /* Adiciona reticências ao texto cortado */
+        max-width: 60%; /* Limita a largura do título */
+        text-align: center; /* Centraliza o texto */
+    }
+
+    .icon {
+        font-size: 24px;
+        margin-right: 5px; /* Reduz a margem */
+        flex-shrink: 0; /* Impede que o ícone encolha */
+    }
+
+    .connection-status {
+        position: absolute;
+        right: 5px;
+        top: 50%;
+        transform: translateY(-50%);
+        font-size: 12px;
+        padding: 3px 5px;
+    }
+
+    .connection-status i {
+        font-size: 16px;
+        margin-right: 3px;
+    }
+
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr); /* Mantém 3 colunas */
+        gap: 5px; /* Reduz ainda mais o espaçamento */
+        padding: 5px; /* Reduz o padding */
+    }
+
+    .product-card {
+        height: 120px; /* Reduz bastante a altura */
+        border-radius: 10px; /* Bordas menos arredondadas */
+    }
+
+    .product-icon {
+        font-size: 40px; /* Ícone bem menor */
+        margin-top: 10px; /* Ajusta a posição para cima */
+    }
+
+    .product-name {
+        font-size: 12px; /* Texto ainda menor */
+        line-height: 1.1; /* Reduz mais o espaçamento entre linhas */
+        margin-top: 5px; /* Adiciona um pequeno espaço acima do texto */
+        padding: 0 2px; /* Reduz o padding lateral */
+        position: relative; /* Permite ajustar a posição */
+        top: -5px; /* Move o texto para cima */
+    }
+
+    .tab {
+        min-width: 70px;
+        padding: 8px 5px;
+        font-size: 12px;
+    }
+
+    .tab-icon {
+        font-size: 20px;
+    }
+
+    .form-input {
+        padding: 10px 10px 10px 35px;
+        font-size: 14px;
+    }
+
+    .input-icon {
+        font-size: 16px;
+        left: 10px;
+        top: 12px;
+    }
+
+    .modal-content {
+        padding: 10px;
+        width: 98%;
+    }
+
+    .modal-title {
+        font-size: 18px;
+    }
+
+    .form-buttons {
+        flex-direction: column;
+    }
+
+    .form-button {
+        margin: 5px 0;
+    }
+
+    .finish-button {
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .finish-button i {
+        font-size: 18px;
+    }
+
+    .order-reader {
+        width: 98%;
+        margin-top: 10px !important; /* Margem reduzida em celulares */
+        max-height: 85vh; /* Limita a altura para não sobrepor o cabeçalho */
+    }
+
+    .order-card-header h2 {
+        font-size: 20px;
+    }
+
+    .order-header-icon {
+        font-size: 24px;
+    }
+
+    .order-card-content {
+        padding: 15px;
+        padding-top: 10px; /* Reduz ainda mais o padding superior */
+    }
+
+    /* Ajustes específicos para iPhone SE e dispositivos similares */
+    @media only screen 
+        and (device-width: 375px) 
+        and (device-height: 667px) 
+        and (-webkit-device-pixel-ratio: 2) {
+        
+        .product-card {
+            height: clamp(160px, 20vw, 180px);
+        }
+        
+        .product-icon {
+            font-size: clamp(40px, 6vw, 55px);
+        }
+        
+        .product-name {
+            font-size: clamp(12px, 2.2vw, 16px);
+        }
+    }
+
+    /* Ajustes para tablets em modo paisagem */
+    @media only screen 
+        and (min-device-width: 768px) 
+        and (max-device-width: 1024px) 
+        and (orientation: landscape) {
+        
+        .products-grid {
+            grid-template-columns: repeat(4, 1fr);
+        }
+        
+        .product-card {
+            height: clamp(180px, 15vw, 200px);
+        }
+    }
+
+    /* Ajustes específicos para iPad */
+    @media only screen 
+        and (min-device-width: 768px) 
+        and (max-device-width: 1024px) 
+        and (-webkit-min-device-pixel-ratio: 2) {
+        
+        .product-icon {
+            font-size: clamp(50px, 6vw, 75px);
+        }
+        
+        .product-name {
+            font-size: clamp(14px, 2vw, 18px);
+        }
+    }
+
+    /* Melhorias para telas touch */
+    @media (pointer: coarse) {
+        .product-card {
+            min-height: 120px; /* Garante área mínima tocável */
+            padding: clamp(8px, 2vw, 12px);
+        }
+        
+        /* Aumenta ligeiramente os elementos em dispositivos touch */
+        .product-icon {
+            font-size: clamp(45px, 7vw, 100px);
+        }
+        
+        .product-name {
+            font-size: clamp(13px, 2.3vw, 20px);
+        }
+    }
+
+    /* Sistema de breakpoints customizados mais granulares */
+    @media (max-width: 320px) {
+        /* Dispositivos muito pequenos */
+        .product-card {
+            height: clamp(140px, 25vw, 160px);
+        }
+    }
+
+    @media (min-width: 321px) and (max-width: 480px) {
+        /* Smartphones padrão */
+        .products-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @media (min-width: 481px) and (max-width: 768px) {
+        /* Smartphones grandes e tablets pequenos */
+        .products-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
+    }
+
+    @media (min-width: 1200px) {
+        /* Desktops e tablets grandes */
+        .products-grid {
+            grid-template-columns: repeat(4, 1fr);
+            max-width: 1400px;
+        }
+    }
+}
+
+/* Ajustes para orientação paisagem em dispositivos móveis */
+@media (max-height: 500px) and (orientation: landscape) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+        padding-bottom: 80px;
+    }
+
+    .product-card {
+        height: 180px;
+    }
+
+    .product-icon {
+        font-size: 60px;
+    }
+
+    .product-name {
+        font-size: 14px;
+    }
+
+    .tabs {
+        height: auto;
+        min-height: 60px;
+    }
+
+    .tab-icon {
+        font-size: 20px;
+        margin-bottom: 5px;
+    }
+
+    .order-reader {
+        max-height: 90vh;
+        overflow-y: auto;
+        margin-top: 10px !important; /* Margem reduzida em orientação paisagem */
+    }
+
+    .icon-container {
+        width: 150px;
+        height: 150px;
+        margin-bottom: 20px;
+    }
+
+    .barcode-icon {
+        width: 100px;
+        height: 100px;
+    }
+
+    .order-card-content {
+        padding: 15px;
+    }
+
+    .finish-button-container {
+        padding: 5px;
+    }
+
+    .finish-button {
+        padding: 10px;
+    }
+}
+
+/* Ajustes para telas de alta resolução */
+@media (min-width: 1600px) {
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+        max-width: 1400px;
+    }
+
+    .product-card {
+        height: 280px;
+    }
+
+    .product-icon {
+        font-size: 120px;
+    }
+
+    .product-name {
+        font-size: 24px;
+    }
+}
+
+/* Ajustes para acessibilidade - modo de alto contraste */
+@media (prefers-contrast: high) {
+    :root {
+        --primary-color: #0066cc;
+        --primary-dark: #004080;
+        --secondary-color: #008000;
+        --text-color: #000000;
+        --light-text: #333333;
+        --background-color: #ffffff;
+        --card-background: #ffffff;
+        --border-color: #000000;
+        --shadow-color: rgba(0, 0, 0, 0.3);
+    }
+
+    .product-card {
+        border: 2px solid var(--border-color);
+    }
+
+    .tab.active {
+        border-bottom: 3px solid var(--primary-color);
+        font-weight: bolder;
+    }
+
+    .form-input {
+        border: 2px solid var(--border-color);
+    }
+}
+
+/* Ajustes para modo escuro - DESATIVADO para evitar o fundo azul cinza */
+@media (prefers-color-scheme: no-preference) {
+    :root {
+        --primary-color: #3498db;
+        --primary-dark: #2980b9;
+        --secondary-color: #2ecc71;
+        --text-color: #2c3e50;
+        --light-text: #7f8c8d;
+        --background-color: #f5f5f5;
+        --card-background: #ffffff;
+        --border-color: #e0e0e0;
+        --shadow-color: rgba(0, 0, 0, 0.1);
+    }
+
+    body {
+        background-color: #f5f5f5;
+        color: #2c3e50;
+    }
+
+    .product-card {
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 245, 245, 0.8) 100%);
+    }
+
+    .product-name {
+        color: #2c3e50;
+    }
+
+    .form-input {
+        background-color: #ffffff;
+        color: #2c3e50;
+        border-color: #e0e0e0;
+    }
+
+    .modal-content, .confirmation-content {
+        background-color: #ffffff;
+        color: #2c3e50;
+    }
+
+    .close {
+        color: #7f8c8d;
+    }
+
+    .tabs, .main-tabs {
+        background-color: #ffffff;
+    }
+
+    .tab, .main-tab {
+        color: #7f8c8d;
+    }
+
+    .tab.active, .main-tab.active {
+        color: #3498db;
+    }
+
+    .category-header {
+        background-color: #ffffff;
+    }
+
+    .category-description {
+        color: #2c3e50;
+    }
+
+    .order-info {
+        background-color: #ffffff;
+    }
+
+    .order-label {
+        color: #7f8c8d;
+    }
+
+    .order-code {
+        color: #2c3e50;
+    }
+}
+
+/* Ajustes para animações reduzidas (acessibilidade) */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation: none !important;
+        transition: none !important;
+    }
+
+    .product-card:hover {
+        transform: none !important;
+    }
+
+    .read-button:hover::before {
+        transform: none !important;
+    }
+}
+
+/* Ajustes para impressão */
+@media print {
+    .container {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    header, .tabs, .finish-button-container, .camera-scan-button, .read-button {
+        display: none !important;
+    }
+
+    .products-grid {
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+    }
+
+    .product-card {
+        box-shadow: none;
+        border: 1px solid #000;
+        height: auto;
+        page-break-inside: avoid;
+    }
+
+    .product-icon {
+        font-size: 40px;
+    }
+
+    .product-name {
+        font-size: 14px;
+    }
+}

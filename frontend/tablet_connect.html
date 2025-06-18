@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conectando ao Terminal Máquina</title>
+</head>
+<body style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">
+    <p>Conectando ao Terminal Máquina...</p>
+    <script>
+    (async () => {
+        try {
+            const resp = await fetch('/server_info.json');
+            if (!resp.ok) throw new Error('Servidor não disponível');
+            const info = await resp.json();
+            // Tenta conexão pela rede local
+                try {
+                const check = await fetch(`http://${info.ip}:${info.port}/server_info.json`);
+                if (check.ok) {
+                    window.location.href = `http://${info.ip}:${info.port}/maquina`;
+                        return;
+                    }
+            } catch {}
+            // Fallback para acesso externo
+            window.location.href = `${info.external_url}/maquina`;
+        } catch {
+            document.body.innerHTML = '<p>Não foi possível conectar ao servidor.</p>';
+            }
+    })();
+    </script>
+</body>
+</html>

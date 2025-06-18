@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gestão de Produção</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#3498db">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <style>
+        body {
+            max-width: 1080px;
+            margin: 0 auto;
+            overscroll-behavior: none;
+        }
+
+        @media (min-width: 1081px) {
+            body {
+                border-left: 1px solid #ddd;
+                border-right: 1px solid #ddd;
+                min-height: 100vh;
+            }
+        }
+
+        /* Ajustes para viewport em dispositivos móveis */
+        @viewport {
+            width: device-width;
+            zoom: 1.0;
+            user-zoom: fixed;
+        }
+
+        /* Ajustes para evitar zoom em inputs em iOS */
+        @media screen and (-webkit-min-device-pixel-ratio: 0) {
+            select,
+            textarea,
+            input {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Notificação -->
+        <div class="notification" id="notification">
+            <i class="material-icons">check_circle</i>
+            <span id="notification-message">Produto adicionado com sucesso!</span>
+        </div>
+        <!-- Cabeçalho -->
+        <header>
+            <i class="material-icons icon">production_quantity_limits</i>
+            <span id="header-title">TERMINAL MÁQUINA</span>
+            <div class="connection-status online" id="connection-status">
+                <i class="material-icons">wifi</i>
+                <span id="connection-text">Online</span>
+            </div>
+        </header>
+
+        <!-- Tela de Leitura de Código de Barras -->
+        <div id="barcode-container" style="position: relative; height: calc(100vh - 60px); padding-top: 20px;">
+            <div id="barcode-screen" class="order-reader">
+                <div class="order-card-header">
+                    <i class="material-icons order-header-icon">assignment</i>
+                    <h2>Ordem de Produção</h2>
+                </div>
+
+                <div class="order-card-content">
+                    <div class="icon-container">
+                        <svg class="barcode-icon" viewBox="0 0 24 24">
+                            <path d="M4 6h2v12H4V6m3 0h1v12H7V6m2 0h3v12H9V6m4 0h1v12h-1V6m3 0h2v12h-2V6m3 0h1v12h-1V6z"/>
+                        </svg>
+                    </div>
+
+                    <div class="order-instructions">
+                        <p>Escaneie ou digite o código da ordem de produção para continuar</p>
+                    </div>
+
+                    <div class="input-container">
+                        <div class="input-row">
+                            <div class="input-field">
+                                <i class="material-icons input-prefix-icon">code</i>
+                                <input type="text" id="order-code-input" placeholder="Digite ou escaneie o código" onkeypress="handleKeyPress(event)">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="scan-button-container">
+                        <button class="camera-scan-button" onclick="openCamera()">
+                            <i class="material-icons">photo_camera</i>
+                            <span>Escanear</span>
+                        </button>
+                    </div>
+
+                    <div id="camera-container" class="camera-container">
+                        <div class="camera-header">
+                            <span>Posicione o código de barras na câmera</span>
+                            <button class="camera-close" onclick="closeCamera()">
+                                <i class="material-icons">close</i>
+                            </button>
+                        </div>
+                        <video id="camera-preview" class="camera-preview" autoplay></video>
+                        <div class="camera-buttons">
+                            <button class="camera-button" onclick="captureBarcode()">
+                                <svg class="button-barcode-icon" viewBox="0 0 24 24">
+                                    <path d="M4 6h2v12H4V6m3 0h1v12H7V6m2 0h3v12H9V6m4 0h1v12h-1V6m3 0h2v12h-2V6m3 0h1v12h-1V6z"/>
+                                </svg>
+                                Capturar Código
+                            </button>
+                            <button class="camera-button secondary" onclick="closeCamera()">
+                                <i class="material-icons">close</i>
+                                Fechar
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="button-container">
+                        <button class="read-button" onclick="readOrderCode()">
+                            <i class="material-icons">arrow_forward</i>
+                            Continuar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela Principal (inicialmente oculta) -->
+        <div id="main-screen" style="display: none;">
+            <!-- Informações da Ordem -->
+            <div class="order-info">
+                <span class="order-label">Ordem de Produção:</span>
+                <span class="order-code" id="order-code-display">0459490012</span>
+            </div>
+
+            <!-- Tela de Produção -->
+            <div id="production-screen">
+                <!-- Abas de categorias -->
+                <div class="tabs">
+                    <div class="tab active" data-category="PT" onclick="changeTab('PT')">
+                        <i class="material-icons tab-icon">receipt_long</i>
+                        <span>PT</span>
+                    </div>
+                    <div class="tab" data-category="PH" onclick="changeTab('PH')">
+                        <i class="material-icons tab-icon">sanitizer</i>
+                        <span>PH</span>
+                    </div>
+                    <div class="tab" data-category="TB" onclick="changeTab('TB')">
+                        <i class="material-icons tab-icon">cleaning_services</i>
+                        <span>TB</span>
+                    </div>
+                    <div class="tab" data-category="ST" onclick="changeTab('ST')">
+                        <i class="material-icons tab-icon">shopping_bag</i>
+                        <span>ST</span>
+                    </div>
+                    <div class="tab" data-category="GN" onclick="changeTab('GN')">
+                        <i class="material-icons tab-icon">table_restaurant</i>
+                        <span>GN</span>
+                    </div>
+                </div>
+
+                <!-- Descrição da categoria -->
+                <div class="category-header">
+                    <div class="category-description" id="category-description">Papel Toalha</div>
+                </div>
+
+                <!-- Grade de produtos -->
+                <div class="products-grid" id="products-container">
+                    <!-- Os produtos serão adicionados dinamicamente aqui -->
+                </div>
+            </div>
+
+            <!-- Botão de Concluir Fixo -->
+            <div class="finish-button-container">
+                <button class="finish-button" onclick="showConfirmationModal()">
+                    <i class="material-icons">check_circle</i>
+                    CONCLUIR
+                </button>
+            </div>
+        </div>
+
+        <!-- Modal de Produto -->
+        <div id="product-modal" class="product-modal">
+            <div class="modal-content">
+                <span class="close" onclick="closeProductModal()">&times;</span>
+                <div class="modal-header">
+                    <div class="product-icon-container">
+                        <i class="material-icons" style="font-size: 64px; color: #3498db;" id="modal-product-icon">inventory</i>
+                    </div>
+                    <h2 class="modal-title" id="modal-product-name">Nome do Produto</h2>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Código do Produto</label>
+                    <i class="material-icons input-icon">qr_code</i>
+                    <input type="text" class="form-input" id="product-code" placeholder="Código do Produto">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Contador</label>
+                    <i class="material-icons input-icon">speed</i>
+                    <input type="number" class="form-input" id="product-counter" placeholder="Contador">
+                </div>
+                <div class="form-group" id="weight-group-1">
+                    <label class="form-label">Peso Bobina 1 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-1" placeholder="Peso Bobina 1 (kg)" oninput="checkWeightInput(1)">
+                </div>
+                <div class="form-group" id="weight-group-2" style="display: none;">
+                    <label class="form-label">Peso Bobina 2 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-2" placeholder="Peso Bobina 2 (kg)" oninput="checkWeightInput(2)">
+                </div>
+                <div class="form-group" id="weight-group-3" style="display: none;">
+                    <label class="form-label">Peso Bobina 3 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-3" placeholder="Peso Bobina 3 (kg)" oninput="checkWeightInput(3)">
+                </div>
+                <div class="form-group" id="weight-group-4" style="display: none;">
+                    <label class="form-label">Peso Bobina 4 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-4" placeholder="Peso Bobina 4 (kg)" oninput="checkWeightInput(4)">
+                </div>
+                <div class="form-group" id="weight-group-5" style="display: none;">
+                    <label class="form-label">Peso Bobina 5 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-5" placeholder="Peso Bobina 5 (kg)" oninput="checkWeightInput(5)">
+                </div>
+                <div class="form-group" id="weight-group-6" style="display: none;">
+                    <label class="form-label">Peso Bobina 6 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-6" placeholder="Peso Bobina 6 (kg)" oninput="checkWeightInput(6)">
+                </div>
+                <div class="form-group" id="weight-group-7" style="display: none;">
+                    <label class="form-label">Peso Bobina 7 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-7" placeholder="Peso Bobina 7 (kg)" oninput="checkWeightInput(7)">
+                </div>
+                <div class="form-group" id="weight-group-8" style="display: none;">
+                    <label class="form-label">Peso Bobina 8 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-8" placeholder="Peso Bobina 8 (kg)" oninput="checkWeightInput(8)">
+                </div>
+                <div class="form-group" id="weight-group-9" style="display: none;">
+                    <label class="form-label">Peso Bobina 9 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-9" placeholder="Peso Bobina 9 (kg)" oninput="checkWeightInput(9)">
+                </div>
+                <div class="form-group" id="weight-group-10" style="display: none;">
+                    <label class="form-label">Peso Bobina 10 (kg)</label>
+                    <i class="material-icons input-icon">monitor_weight</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-10" placeholder="Peso Bobina 10 (kg)" oninput="checkWeightInput(10)">
+                </div>
+                <div class="form-group" id="weight-total" style="display: none;">
+                    <label class="form-label">Peso Total (kg)</label>
+                    <i class="material-icons input-icon">scale</i>
+                    <input type="number" step="0.01" class="form-input" id="product-weight-total" placeholder="Peso Total (kg)" readonly>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Fornecedor</label>
+                    <i class="material-icons input-icon">business</i>
+                    <input type="text" class="form-input" id="product-supplier" placeholder="Fornecedor">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">GM² Fornecedor</label>
+                    <i class="material-icons input-icon">straighten</i>
+                    <input type="text" class="form-input" id="product-gm2" placeholder="GM² Fornecedor">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Produção Real</label>
+                    <i class="material-icons input-icon">inventory</i>
+                    <input type="text" class="form-input" id="product-production" placeholder="Produção Real">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Perda KG</label>
+                    <i class="material-icons input-icon">remove_circle</i>
+                    <input type="text" class="form-input" id="product-losses" placeholder="Perda KG">
+                </div>
+                <div class="form-buttons">
+                    <button class="form-button cancel-button" onclick="closeProductModal()">Cancelar</button>
+                    <button class="form-button save-button" onclick="saveProduct()">Salvar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal de Configurações -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content settings-modal-content">
+                <span class="close" onclick="closeSettingsModal()">&times;</span>
+                <h2 class="modal-title">Configurações</h2>
+
+                <div class="settings-tabs">
+                    <button class="tab-button active" data-tab="products" onclick="openSettingsTab('products')">Produtos</button>
+                    <button class="tab-button" data-tab="links" onclick="openSettingsTab('links')">Links</button>
+                </div>
+
+                <!-- Aba de Produtos -->
+                <div id="products-tab" class="tab-content">
+                    <div class="import-export-buttons">
+                        <button class="action-button" onclick="exportProducts()">
+                            <i class="material-icons">file_download</i> Exportar Lista
+                        </button>
+                        <input type="file" id="import-file" accept=".json" style="display: none;" onchange="importProducts(event)">
+                        <button class="action-button" onclick="document.getElementById('import-file').click()">
+                            <i class="material-icons">file_upload</i> Importar Lista
+                        </button>
+                    </div>
+
+                    <div class="product-category-tabs">
+                        <button class="category-tab active" data-category="pt" onclick="openCategoryTab('pt')">Papel Toalha (PT)</button>
+                        <button class="category-tab" data-category="ph" onclick="openCategoryTab('ph')">Papel Higiênico (PH)</button>
+                        <button class="category-tab" data-category="tb" onclick="openCategoryTab('tb')">Toalha Bobina (TB)</button>
+                        <button class="category-tab" data-category="st" onclick="openCategoryTab('st')">Sacos e Talheres (ST)</button>
+                        <button class="category-tab" data-category="gd" onclick="openCategoryTab('gd')">Guardanapos (GN)</button>
+                    </div>
+
+                    <div class="product-categories">
+                        <!-- Papel Toalha -->
+                        <div class="category-section" id="pt-section">
+                            <div class="product-list" id="pt-products">
+                                <!-- Lista de produtos PT -->
+                            </div>
+                            <div class="add-product-row">
+                                <input type="text" id="new-pt-product" placeholder="Nome do novo produto">
+                                <button onclick="addNewProduct('pt')">Adicionar</button>
+                            </div>
+                        </div>
+
+                        <!-- Papel Higiênico -->
+                        <div class="category-section" id="ph-section" style="display: none;">
+                            <div class="product-list" id="ph-products">
+                                <!-- Lista de produtos PH -->
+                            </div>
+                            <div class="add-product-row">
+                                <input type="text" id="new-ph-product" placeholder="Nome do novo produto">
+                                <button onclick="addNewProduct('ph')">Adicionar</button>
+                            </div>
+                        </div>
+
+                        <!-- Toalha Bobina -->
+                        <div class="category-section" id="tb-section" style="display: none;">
+                            <div class="product-list" id="tb-products">
+                                <!-- Lista de produtos TB -->
+                            </div>
+                            <div class="add-product-row">
+                                <input type="text" id="new-tb-product" placeholder="Nome do novo produto">
+                                <button onclick="addNewProduct('tb')">Adicionar</button>
+                            </div>
+                        </div>
+
+                        <!-- Sacos e Talheres -->
+                        <div class="category-section" id="st-section" style="display: none;">
+                            <div class="product-list" id="st-products">
+                                <!-- Lista de produtos ST -->
+                            </div>
+                            <div class="add-product-row">
+                                <input type="text" id="new-st-product" placeholder="Nome do novo produto">
+                                <button onclick="addNewProduct('st')">Adicionar</button>
+                            </div>
+                        </div>
+
+                        <!-- Guardanapos -->
+                        <div class="category-section" id="gd-section" style="display: none;">
+                            <div class="product-list" id="gd-products">
+                                <!-- Lista de produtos GN -->
+                            </div>
+                            <div class="add-product-row">
+                                <input type="text" id="new-gd-product" placeholder="Nome do novo produto">
+                                <button onclick="addNewProduct('gd')">Adicionar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Aba de Links -->
+                <div id="links-tab" class="tab-content" style="display: none;">
+                    <h3>Configurar Links</h3>
+                    <div class="links-section">
+                        <div class="form-group">
+                            <label>Link do Google Drive:</label>
+                            <input type="text" id="drive-link" placeholder="https://docs.google.com/spreadsheets/d/...">
+                        </div>
+
+                        <div class="form-group">
+                            <label>Link do Web App:</label>
+                            <input type="text" id="webapp-link" placeholder="https://script.google.com/macros/s/...">
+                        </div>
+
+                        <button onclick="saveLinks()" class="action-button">
+                            <i class="material-icons">save</i> Salvar Configurações
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tela de Confirmação -->
+        <div id="confirmation-modal" class="confirmation-modal">
+            <div class="confirmation-content">
+                <div class="confirmation-header">
+                    <h2>Resumo da Ordem</h2>
+                    <p>Verifique os dados antes de finalizar a ordem.</p>
+                </div>
+                <div class="confirmation-data" id="confirmation-data">
+                    <!-- Dados da ordem serão inseridos aqui -->
+                </div>
+                <div class="confirmation-buttons">
+                    <button class="confirmation-button delete-button" onclick="deleteSelectedProduct()">
+                        <i class="material-icons">delete</i> Apagar
+                    </button>
+                    <button class="confirmation-button edit-button" onclick="editSelectedProduct()">
+                        <i class="material-icons">edit</i> Editar
+                    </button>
+                    <button class="confirmation-button confirm-button" onclick="finishOrder()">
+                        <i class="material-icons">check_circle</i> Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Indicador de Buffer Offline -->
+        <div class="offline-buffer" id="offline-buffer">
+            <i class="material-icons">cloud_off</i>
+            <span><span id="buffer-count">0</span> item(s) no buffer offline</span>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="js/products.js"></script>
+    <script src="js/sheets-integration.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/responsive.js"></script>
+    <script src="js/maquina.js"></script>
+    
+    <!-- Script de diagnóstico automático -->
+    <script src="js/diagnostico-rapido.js"></script>
+</body>
+</html>

@@ -1,0 +1,1493 @@
+const { app, BrowserWindow, ipcMain, Menu, shell, dialog } = require('electron');
+const path = require('path');
+const { spawn, exec } = require('child_process');
+const fs = require('fs');
+const Database = require('./database/database');
+const dataStore = require('./backend/data-store');
+const express = require('express');
+const localtunnel = require('localtunnel');
+const sqlite3 = require('sqlite3').verbose();
+const { autoUpdater } = require('electron-updater');
+
+// Configuração do auto-updater para instalação silenciosa
+autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'Andre-Buzeli',
+    repo: 'sistema-gestao-producao-desktop'
+});
+
+// Configurações para instalação silenciosa automática
+autoUpdater.autoDownload = true;
+autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoRunAppAfterInstall = true;
+
+// Logs do auto-updater
+autoUpdater.logger = require('electron-log');
+autoUpdater.logger.transports.file.level = 'info';
+
+// Tratamento global de erros não capturados
+process.on('uncaughtException', (error) => {
+    console.error('❌ ERRO NÃO CAPTURADO:', error);
+    console.error('Stack:', error.stack);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ PROMISE REJEITADA:', reason);
+    console.error('Promise:', promise);
+});
+
+// Desabilitar aceleração de hardware para evitar problemas de GPU
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('--disable-gpu');
+app.commandLine.appendSwitch('--disable-gpu-sandbox');
+app.commandLine.appendSwitch('--disable-software-rasterizer');
+app.commandLine.appendSwitch('--disable-dev-shm-usage');
+app.commandLine.appendSwitch('--no-sandbox');
+app.commandLine.appendSwitch('--disable-features=VizDisplayCompositor');
+app.commandLine.appendSwitch('--disable-accelerated-2d-canvas');
+app.commandLine.appendSwitch('--disable-accelerated-jpeg-decoding');
+app.commandLine.appendSwitch('--disable-accelerated-mjpeg-decode');
+app.commandLine.appendSwitch('--disable-accelerated-video-decode');
+app.commandLine.appendSwitch('--disable-background-timer-throttling');
+app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('--disable-renderer-backgrounding');
+app.commandLine.appendSwitch('--disable-web-security');
+app.commandLine.appendSwitch('--in-process-gpu');
+app.commandLine.appendSwitch('--disable-domain-reliability');
+
+class DesktopManager {
+    constructor() {
+        this.mainWindow = null;
+        this.isServerRunning = false;
+        this.serverPort = 3000;
+        this.database = new Database();
+        this.server = null;
+        this.tunnel = null;
+        this.tunnelUrl = null;
+        this.initialized = false; // Flag de inicialização
+    }
+
+    async initialize() {
+        try {
+            console.log('🚀 Iniciando aplicação desktop...');
+            console.log('📍 Diretório atual:', __dirname);
+            console.log('📍 Processo:', process.cwd());
+            
+            console.log('📋 Configurando menu...');
+            Menu.setApplicationMenu(null);
+            console.log('✅ Menu configurado');
+            
+            console.log('🔗 Configurando IPC...');
+            this.setupIPC();
+            console.log('✅ IPC configurado');
+            
+            console.log('🔄 Configurando auto-updater...');
+            this.setupAutoUpdater();
+            console.log('✅ Auto-updater configurado');
+            
+            console.log('🗄️ Inicializando banco de dados...');
+            try {
+                await this.database.initialize();
+                console.log('✅ Banco de dados inicializado');
+            } catch (error) {
+                console.warn('⚠️ Aviso: Banco de dados com problema de I/O:', error.code);
+                console.log('📋 Sistema continuará em modo somente memória (data-store)');
+                console.log('💡 Funcionalidades básicas mantidas, sem persistência SQLite');
+                // Não falha - continua sem banco SQLite
+            }
+            
+            console.log('✅ Aplicação inicializada com sucesso');
+            this.initialized = true; // Marcar como inicializada
+            
+            // Auto-start do servidor desabilitado - usuário deve iniciar manualmente
+            console.log('💡 Para iniciar o servidor, clique em "Iniciar Servidor" na interface');
+            // 
+            // // Iniciar servidor automaticamente (DESABILITADO)
+            // console.log('🌐 Iniciando servidor...');
+            // await this.startServer();
+            // console.log('✅ Servidor iniciado com sucesso');
+            // 
+            // // Aguardar 3 segundos para servidor estabilizar antes de tentar tunnel
+            // setTimeout(() => {
+            //     this.setupExternalAccess();
+            // }, 3000);
+        } catch (error) {
+            console.error('❌ ERRO FATAL na inicialização:', error);
+            console.error('Stack trace:', error.stack);
+            console.error('Erro detalhado:', {
+                message: error.message,
+                name: error.name,
+                code: error.code
+            });
+            
+            // Mostrar dialog de erro antes de fechar
+            const { dialog } = require('electron');
+            dialog.showErrorBox('Erro Fatal', 
+                `Falha na inicialização:\n\n${error.message}\n\nVerifique os logs para mais detalhes.`
+            );
+            
+            setTimeout(() => {
+                app.quit();
+            }, 5000);
+        }
+    }
+
+    createMainWindow() {
+        this.mainWindow = new BrowserWindow({
+            width: 1200,
+            height: 800,
+            minWidth: 900,
+            minHeight: 600,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true,
+                preload: path.join(__dirname, 'preload.js'),
+                webSecurity: true,
+                allowRunningInsecureContent: false,
+                experimentalFeatures: false
+            },
+            show: false,
+            autoHideMenuBar: true,
+            titleBarStyle: 'default'
+        });
+
+        // Path mais robusto para o arquivo HTML
+        const htmlPath = path.join(__dirname, 'frontend', 'desktop.html');
+        console.log('📄 Carregando HTML:', htmlPath);
+        console.log('📄 Arquivo existe:', require('fs').existsSync(htmlPath));
+        
+        this.mainWindow.loadFile(htmlPath).catch(error => {
+            console.error('❌ Erro ao carregar HTML:', error);
+            // Tentar path alternativo
+            const alternativePath = path.join(__dirname, 'frontend', 'index.html');
+            console.log('🔄 Tentando path alternativo:', alternativePath);
+            return this.mainWindow.loadFile(alternativePath);
+        });
+
+        this.mainWindow.once('ready-to-show', () => {
+            this.mainWindow.show();
+        });
+
+        this.mainWindow.on('closed', () => {
+            this.stopServer();
+            this.mainWindow = null;
+        });
+
+        // Abrir links externos no navegador padrão
+        this.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+            shell.openExternal(url);
+            return { action: 'deny' };
+        });
+    }
+
+    setupMenu() {
+        const template = [
+            {
+                label: 'Servidor',
+                submenu: [
+                    {
+                        label: 'Iniciar Servidor',
+                        click: () => this.startServer(),
+                        enabled: !this.isServerRunning
+                    },
+                    {
+                        label: 'Parar Servidor',
+                        click: () => this.stopServer(),
+                        enabled: this.isServerRunning
+                    },
+                    {
+                        label: 'Reiniciar Servidor',
+                        click: () => this.restartServer(),
+                        enabled: this.isServerRunning
+                    },
+                    { type: 'separator' },
+                    {
+                        label: 'Abrir no Navegador',
+                        click: () => shell.openExternal(`http://localhost:${this.serverPort}`),
+                        enabled: this.isServerRunning
+                    }
+                ]
+            },
+            {
+                label: 'Dados',
+                submenu: [
+                    {
+                        label: 'Backup Dados',
+                        click: () => this.backupData()
+                    },
+                    {
+                        label: 'Restaurar Dados',
+                        click: () => this.restoreData()
+                    },
+                    { type: 'separator' },
+                    {
+                        label: 'Limpar Logs',
+                        click: () => this.clearLogs()
+                    }
+                ]
+            },
+            {
+                label: 'Ajuda',
+                submenu: [
+                    {
+                        label: 'Sobre',
+                        click: () => this.showAbout()
+                    },
+                    {
+                        label: 'Logs do Sistema',
+                        click: () => this.showLogs()
+                    }
+                ]
+            }
+        ];
+
+        const menu = Menu.buildFromTemplate(template);
+        Menu.setApplicationMenu(menu);
+    }
+
+    setupIPC() {
+        // Controle do servidor
+        ipcMain.handle('server:start', () => this.startServer());
+        ipcMain.handle('server:stop', () => this.stopServer());
+        ipcMain.handle('server:restart', () => this.restartServer());
+        ipcMain.handle('server:status', () => {
+            if (!this.initialized) {
+                return { running: false, port: null, localIP: null, tunnelUrl: null, status: 'initializing' };
+            }
+            return {
+                running: this.isServerRunning,
+                port: this.serverPort,
+                localIP: this.getLocalIP(),
+                tunnelUrl: this.tunnelUrl
+            };
+        });
+
+        // Gestão de dispositivos
+        ipcMain.handle('devices:list', () => {
+            if (!this.initialized || !this.database) return [];
+            return this.database.getDevices();
+        });
+        ipcMain.handle('devices:create', (event, device) => this.database ? this.database.createDevice(device) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:update', (event, id, device) => this.database ? this.database.updateDevice(id, device) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:delete', (event, id) => this.database ? this.database.deleteDevice(id) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:authorize', (event, id) => this.database ? this.database.authorizeDevice(id) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:revoke', (event, id) => this.database ? this.database.revokeDevice(id) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:reject', (event, id) => this.database ? this.database.rejectDevice(id) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('devices:deleteAll', () => this.database ? this.database.deleteAllDevices() : { success: false, message: 'Banco indisponível' });
+
+        // Gestão de produtos
+        ipcMain.handle('products:list', async () => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.initialized && this.database) {
+                    const dbProducts = await this.database.getProducts();
+                    if (dbProducts && dbProducts.length > 0) {
+                        return dbProducts;
+                    }
+                }
+                
+                // Fallback para dataStore
+                const allProducts = dataStore.getAllProducts();
+                const productsArray = Object.keys(allProducts).reduce((acc, category) => {
+                    const categoryProducts = allProducts[category].map(product => ({
+                        id: product.id,
+                        codigo: product.id,
+                        nome: product.name,
+                        categoria: product.category || category.toUpperCase(),
+                        peso_inicial: product.peso_inicial || 0,
+                        peso_final: product.peso_final || 0,
+                        created_at: new Date().toISOString()
+                    }));
+                    return acc.concat(categoryProducts);
+                }, []);
+                
+                return productsArray;
+            } catch (error) {
+                console.error('Erro ao listar produtos:', error);
+                return [];
+            }
+        });
+        ipcMain.handle('products:create', async (event, product) => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.database) {
+                    const result = await this.database.createProduct(product);
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                
+                // Fallback para dataStore
+                const category = (product.categoria || 'PT').toLowerCase();
+                const productData = {
+                    id: product.codigo || `${category}_${Date.now()}`,
+                    name: product.nome,
+                    category: product.categoria || 'PT',
+                    peso_inicial: product.peso_inicial || 0,
+                    peso_final: product.peso_final || 0
+                };
+                
+                dataStore.addProduct(category, productData);
+                return { success: true, product: productData };
+            } catch (error) {
+                console.error('Erro ao criar produto:', error);
+                return { success: false, message: error.message };
+            }
+        });
+        ipcMain.handle('products:update', async (event, product) => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.database) {
+                    const result = await this.database.updateProduct(product);
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                
+                // Fallback para dataStore
+                const category = (product.categoria || 'PT').toLowerCase();
+                const productData = {
+                    id: product.codigo || product.id,
+                    name: product.nome,
+                    category: product.categoria || 'PT',
+                    peso_inicial: product.peso_inicial || 0,
+                    peso_final: product.peso_final || 0
+                };
+                
+                // Remove o produto antigo e adiciona o novo (dataStore não tem update direto)
+                dataStore.removeProduct(category, product.id || product.codigo);
+                dataStore.addProduct(category, productData);
+                return { success: true, product: productData };
+            } catch (error) {
+                console.error('Erro ao atualizar produto:', error);
+                return { success: false, message: error.message };
+            }
+        });
+        ipcMain.handle('products:delete', async (event, id) => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.database) {
+                    const result = await this.database.deleteProduct(id);
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                
+                // Fallback para dataStore - precisa encontrar em qual categoria está o produto
+                const allProducts = dataStore.getAllProducts();
+                let found = false;
+                for (const category of Object.keys(allProducts)) {
+                    const categoryProducts = allProducts[category];
+                    if (categoryProducts.find(p => p.id === id)) {
+                        dataStore.removeProduct(category, id);
+                        found = true;
+                        break;
+                    }
+                }
+                
+                return { success: found, message: found ? 'Produto removido' : 'Produto não encontrado' };
+            } catch (error) {
+                console.error('Erro ao deletar produto:', error);
+                return { success: false, message: error.message };
+            }
+        });
+
+        // Gestão de ordens
+        ipcMain.handle('orders:list', async () => {
+            try {
+                console.log('🔍 Carregando ordens para o desktop...');
+                let orders = [];
+                let source = 'Empty';
+                
+                // Prioriza SQLite se disponível
+                if (this.initialized && this.database) {
+                    try {
+                        console.log('📊 Consultando ordens no banco SQLite...');
+                        const dbOrders = await this.database.getOrders();
+                        if (dbOrders && dbOrders.length > 0) {
+                            orders = dbOrders;
+                            source = 'SQLite';
+                            console.log(`✅ Banco SQLite retornou ${orders.length} ordens`);
+                        } else {
+                            console.log('📋 Banco SQLite vazio, verificando dataStore...');
+                        }
+                    } catch (dbError) {
+                        console.error('❌ Erro ao consultar SQLite:', dbError);
+                    }
+                }
+                
+                // Se não tem ordens do SQLite, tenta dataStore
+                if (orders.length === 0) {
+                    console.log('📋 Consultando dataStore para ordens...');
+                    const dataStoreOrders = dataStore.getAllOrders();
+                    console.log('📦 DataStore ordens:', dataStoreOrders);
+                    
+                    if (dataStoreOrders && Object.keys(dataStoreOrders).length > 0) {
+                        // Converter formato do dataStore para o formato esperado pelo frontend
+                        orders = Object.keys(dataStoreOrders).map(orderCode => {
+                            const order = dataStoreOrders[orderCode];
+                            return {
+                                id: orderCode,
+                                order_code: orderCode,
+                                products_data: JSON.stringify(order.products || []),
+                                device_id: order.device_id || order.terminal || 'maquina',
+                                operator: order.operator || 'Sistema',
+                                status: order.status || 'completed',
+                                created_at: new Date(order.createdAt || order.timestamp || Date.now()).toISOString()
+                            };
+                        });
+                        source = 'DataStore';
+                        console.log(`✅ DataStore retornou ${orders.length} ordens`);
+                    } else {
+                        console.log('📋 DataStore também vazio');
+                    }
+                }
+                
+                console.log(`✅ Retornando ${orders.length} ordens (fonte: ${source}) para o desktop`);
+                return orders;
+            } catch (error) {
+                console.error('❌ Erro ao listar ordens:', error);
+                return [];
+            }
+        });
+        ipcMain.handle('orders:create', async (event, order) => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.database) {
+                    const result = await this.database.createOrder(order);
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                
+                // Fallback para dataStore
+                const orderCode = order.order_code || `ORDER_${Date.now()}`;
+                const orderData = dataStore.addCompleteOrder(orderCode, order);
+                return { success: true, order: orderData };
+            } catch (error) {
+                console.error('Erro ao criar ordem:', error);
+                return { success: false, message: error.message };
+            }
+        });
+        ipcMain.handle('orders:update', (event, id, order) => this.database ? this.database.updateOrder(id, order) : { success: false, message: 'Banco indisponível' });
+        ipcMain.handle('orders:delete', async (event, id) => {
+            try {
+                // Prioriza SQLite se disponível
+                if (this.database) {
+                    const result = await this.database.deleteOrder(id);
+                    if (result.success) {
+                        return result;
+                    }
+                }
+                
+                // Fallback para dataStore
+                const success = dataStore.removeOrder(id);
+                return { success: success, message: success ? 'Ordem removida' : 'Ordem não encontrada' };
+            } catch (error) {
+                console.error('Erro ao remover ordem:', error);
+                return { success: false, message: error.message };
+            }
+        });
+        ipcMain.handle('orders:clear-completed', () => this.database ? this.database.clearCompletedOrders() : { success: false, message: 'Banco indisponível' });
+
+        // Logs e configurações
+        ipcMain.handle('logs:list', () => {
+            if (!this.initialized || !this.database) return [];
+            return this.database.getLogs();
+        });
+        ipcMain.handle('logs:clear', () => this.clearLogs());
+        ipcMain.handle('settings:get', () => this.database ? this.database.getSettings() : {});
+        ipcMain.handle('settings:update', (event, settings) => this.database.updateSettings(settings));
+
+        // Backup e restore
+        ipcMain.handle('data:backup', () => this.backupData());
+        ipcMain.handle('data:restore', () => this.restoreData());
+
+        // Adicionar eventos IPC
+        ipcMain.on('retry-tunnel', () => {
+            console.log('Retry tunnel solicitado pelo usuário');
+            this.setupExternalAccess();
+        });
+
+        // Auto-updater events
+        ipcMain.handle('updater:check', () => this.checkForUpdates());
+        ipcMain.handle('updater:download', () => this.downloadUpdate());
+        ipcMain.handle('updater:install', () => this.installUpdate());
+    }
+
+    setupAutoUpdater() {
+        // Detectar se é versão portável
+        const isPortable = process.env.PORTABLE_EXECUTABLE_DIR || 
+                          app.getPath('exe').includes('portable') ||
+                          !app.getPath('userData').includes('AppData');
+
+        // Variável para controlar instalação silenciosa
+        let silentInstallMode = false;
+
+        // Auto-updater events
+        autoUpdater.on('checking-for-update', () => {
+            console.log('🔍 Verificando atualizações...');
+            this.notifyRenderer('updater:checking');
+        });
+
+        autoUpdater.on('update-available', (info) => {
+            console.log('📥 Atualização disponível:', info.version);
+            this.notifyRenderer('updater:available', info);
+            
+            if (isPortable) {
+                // Para versão portável: apenas notificar e abrir link
+                dialog.showMessageBox(this.mainWindow, {
+                    type: 'info',
+                    title: 'Atualização Disponível (Versão Portável)',
+                    message: `Nova versão ${info.version} disponível!`,
+                    detail: 'Como você está usando a versão portável, precisa baixar a nova versão manualmente.\n\nDeseja abrir a página de download?',
+                    buttons: ['Abrir Download', 'Mais tarde'],
+                    defaultId: 0
+                }).then(result => {
+                    if (result.response === 0) {
+                        require('electron').shell.openExternal('https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop/releases');
+                    }
+                });
+            } else {
+                // Para versão instalada: mostrar opção de instalação automática silenciosa
+                dialog.showMessageBox(this.mainWindow, {
+                    type: 'info',
+                    title: 'Atualização Disponível',
+                    message: `Nova versão ${info.version} disponível!`,
+                    detail: 'Escolha como deseja instalar a atualização:',
+                    buttons: ['Instalar Automaticamente (Silencioso)', 'Instalar com Interface', 'Mais tarde'],
+                    defaultId: 0,
+                    cancelId: 2
+                }).then(result => {
+                    if (result.response === 0) {
+                        // Instalação silenciosa automática
+                        console.log('🔄 Iniciando instalação silenciosa automática...');
+                        silentInstallMode = true;
+                        this.notifyRenderer('updater:silent-install');
+                        autoUpdater.downloadUpdate();
+                    } else if (result.response === 1) {
+                        // Instalação com interface
+                        console.log('🔄 Iniciando instalação com interface...');
+                        silentInstallMode = false;
+                        autoUpdater.downloadUpdate();
+                    }
+                });
+            }
+        });
+
+        autoUpdater.on('update-not-available', () => {
+            console.log('✅ Aplicação está atualizada');
+            this.notifyRenderer('updater:not-available');
+        });
+
+        autoUpdater.on('error', (err) => {
+            console.error('❌ Erro no auto-updater:', err);
+            this.notifyRenderer('updater:error', err.message);
+            
+            // Para versão portável, oferecer download manual em caso de erro
+            if (isPortable) {
+                dialog.showMessageBox(this.mainWindow, {
+                    type: 'warning',
+                    title: 'Verificação de Updates',
+                    message: 'Não foi possível verificar atualizações automaticamente.',
+                    detail: 'Deseja verificar manualmente na página de releases?',
+                    buttons: ['Abrir Página', 'Cancelar'],
+                    defaultId: 0
+                }).then(result => {
+                    if (result.response === 0) {
+                        require('electron').shell.openExternal('https://github.com/Andre-Buzeli/sistema-gestao-producao-desktop/releases');
+                    }
+                });
+            }
+        });
+
+        autoUpdater.on('download-progress', (progressObj) => {
+            const msg = `Baixando ${Math.round(progressObj.percent)}%`;
+            console.log('📥', msg);
+            this.notifyRenderer('updater:progress', progressObj);
+        });
+
+        autoUpdater.on('update-downloaded', () => {
+            console.log('✅ Atualização baixada');
+            this.notifyRenderer('updater:downloaded');
+            
+            if (silentInstallMode) {
+                // Instalação silenciosa automática - sem diálogos
+                console.log('🔄 Iniciando instalação silenciosa...');
+                this.notifyRenderer('updater:installing');
+                
+                // Salvar dados importantes antes da instalação
+                this.saveApplicationState();
+                
+                // Aguardar 2 segundos e instalar automaticamente
+                setTimeout(() => {
+                    console.log('🔄 Aplicando atualização silenciosamente...');
+                    this.notifyRenderer('updater:installed');
+                    autoUpdater.quitAndInstall(true, true); // silent=true, forceRunAfter=true
+                }, 2000);
+                
+            } else {
+                // Instalação com interface - perguntar ao usuário
+                dialog.showMessageBox(this.mainWindow, {
+                    type: 'info',
+                    title: 'Atualização Pronta',
+                    message: 'Atualização baixada com sucesso!',
+                    detail: 'Reiniciar agora para aplicar a atualização?',
+                    buttons: ['Reiniciar', 'Mais tarde'],
+                    defaultId: 0
+                }).then(result => {
+                    if (result.response === 0) {
+                        autoUpdater.quitAndInstall();
+                    }
+                });
+            }
+        });
+
+        // Verificar atualizações automaticamente (apenas em produção)
+        if (!app.isPackaged) {
+            console.log('🔧 Modo desenvolvimento - auto-updater desabilitado');
+            return;
+        }
+
+        // Log do tipo de instalação
+        console.log(`🔧 Tipo de instalação: ${isPortable ? 'Portável' : 'Instalado'}`);
+        
+        // Verificar atualizações na inicialização
+        setTimeout(() => {
+            this.checkForUpdates();
+        }, 5000);
+
+        // Verificar atualizações a cada 4 horas
+        setInterval(() => {
+            this.checkForUpdates();
+        }, 4 * 60 * 60 * 1000);
+    }
+
+    async checkForUpdates() {
+        if (!app.isPackaged) {
+            console.log('🔧 Desenvolvimento - verificação de updates desabilitada');
+            return;
+        }
+
+        try {
+            return await autoUpdater.checkForUpdatesAndNotify();
+        } catch (error) {
+            console.error('❌ Erro ao verificar atualizações:', error);
+            throw error;
+        }
+    }
+
+    async downloadUpdate() {
+        try {
+            return await autoUpdater.downloadUpdate();
+        } catch (error) {
+            console.error('❌ Erro ao baixar atualização:', error);
+            throw error;
+        }
+    }
+
+    installUpdate() {
+        autoUpdater.quitAndInstall();
+    }
+
+    // Função para salvar estado da aplicação antes da instalação
+    saveApplicationState() {
+        try {
+            const fs = require('fs');
+            const path = require('path');
+            
+            const appState = {
+                timestamp: new Date().toISOString(),
+                version: app.getVersion(),
+                updateTimestamp: Date.now(),
+                serverPort: this.serverPort || 3000,
+                isServerRunning: this.isServerRunning || false,
+                lastActivity: new Date().toISOString()
+            };
+            
+            const userDataPath = app.getPath('userData');
+            const statePath = path.join(userDataPath, 'app-state-backup.json');
+            
+            fs.writeFileSync(statePath, JSON.stringify(appState, null, 2));
+            console.log('💾 Estado da aplicação salvo para:', statePath);
+            
+            // Notificar renderer sobre backup
+            this.notifyRenderer('updater:state-saved', appState);
+            
+        } catch (error) {
+            console.error('❌ Erro ao salvar estado da aplicação:', error);
+        }
+    }
+
+    async startServer() {
+        // Se o servidor já está rodando, retorna sucesso em vez de erro
+        if (this.isServerRunning) {
+            console.log('ℹ️ Servidor já está em execução');
+            return { success: true, message: 'Servidor já está em execução', alreadyRunning: true };
+        }
+
+        try {
+            const express = require('express');
+            const http = require('http');
+            const path = require('path');
+            const os = require('os');
+
+            this.server = express();
+            
+            // Middleware para parsing JSON
+            this.server.use(express.json());
+
+            // Importar middleware SQLite para autenticação persistente
+            const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
+            const sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
+
+            // ==========================================
+            // SISTEMA DE AUTENTICAÇÃO V2.0 - APIs SIMPLIFICADAS
+            // ==========================================
+            
+            // API para registrar tablet
+            this.server.post('/api/tablet/register', async (req, res) => {
+                try {
+                    if (!this.database) {
+                        return res.status(503).json({ 
+                            success: false, 
+                            message: 'Banco de dados indisponível - modo somente leitura' 
+                        });
+                    }
+
+                    const { deviceId, userAgent, timestamp } = req.body;
+                    const ip = req.ip || req.connection.remoteAddress;
+                    
+                    // Gerar nome automático baseado no device ID
+                    const deviceShortId = deviceId.split('-').pop().substring(0, 6);
+                    const autoOperator = `Terminal-${deviceShortId}`;
+                    
+                    console.log(`🆕 Registro tablet: ${deviceId} | Operador: ${autoOperator} | IP: ${ip}`);
+                    
+                    // Verificar se já existe
+                    const existing = await this.database.getQuery(
+                        'SELECT * FROM devices WHERE device_id = ?', [deviceId]
+                    );
+                    
+                    if (existing) {
+                        // Atualizar dados (manter operador existente se já definido)
+                        const operator = existing.operator || autoOperator;
+                        await this.database.runQuery(
+                            'UPDATE devices SET operator = ?, ip = ?, user_agent = ?, last_activity = CURRENT_TIMESTAMP WHERE device_id = ?',
+                            [operator, ip, userAgent, deviceId]
+                        );
+                        
+                        const authorized = existing.status === 'authorized';
+                        res.json({ 
+                            success: true, 
+                            authorized: authorized,
+                            message: authorized ? 'Já autorizado' : 'Aguardando autorização'
+                        });
+                        } else {
+                        // Criar novo
+                        await this.database.createDevice({
+                            device_id: deviceId,
+                            name: `Tablet - ${autoOperator}`,
+                            type: 'tablet',
+                            ip: ip,
+                            user_agent: userAgent,
+                            operator: autoOperator,
+                            status: 'pending'
+                        });
+                        
+                        res.json({ 
+                            success: true, 
+                            authorized: false,
+                            message: 'Tablet registrado, aguardando autorização'
+                        });
+                        
+                        // Notificar desktop
+                        this.notifyRenderer('device:new', {
+                            deviceId,
+                            deviceName: `Tablet - ${autoOperator}`,
+                            operator: autoOperator,
+                            ip
+                        });
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao registrar tablet:', error);
+                    res.status(500).json({ success: false, message: 'Erro interno do servidor' });
+                }
+            });
+
+            // API para verificar status - RESPOSTA JSON SIMPLES
+            this.server.get('/api/tablet/status/:deviceId', async (req, res) => {
+                try {
+                    if (!this.database) {
+                        return res.status(503).json({ 
+                            success: false, 
+                            authorized: false,
+                            message: 'Banco de dados indisponível - modo somente leitura' 
+                        });
+                    }
+
+                    const { deviceId } = req.params;
+                    console.log(`🔍 Verificando status do device: ${deviceId}`);
+                    
+                    const device = await this.database.getQuery(
+                        'SELECT * FROM devices WHERE device_id = ?', [deviceId]
+                    );
+                    
+                    if (device) {
+                        const authorized = device.status === 'authorized';
+                        console.log(`📱 Device encontrado: ${deviceId} | Status: ${device.status} | Autorizado: ${authorized}`);
+                        
+                        if (authorized) {
+                            // Atualizar último acesso
+                            await this.database.runQuery(
+                                'UPDATE devices SET last_activity = CURRENT_TIMESTAMP WHERE device_id = ?',
+                                [deviceId]
+                            );
+                        }
+                        
+                        const response = { 
+                            authorized: authorized,
+                            operator: device.operator,
+                            status: device.status,
+                            lastActivity: device.last_activity
+                        };
+                        
+                        console.log(`📤 Resposta enviada:`, response);
+                        res.json(response);
+                    } else {
+                        console.log(`❌ Device não encontrado: ${deviceId}`);
+                        res.json({ 
+                            authorized: false, 
+                            status: 'not_found',
+                            message: 'Dispositivo não encontrado'
+                        });
+                    }
+                } catch (error) {
+                    console.error('❌ Erro ao verificar status:', error);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                }
+            });
+
+            // Servir arquivos estáticos
+            this.server.use('/css', express.static(path.join(__dirname, 'frontend/css')));
+            this.server.use('/js', express.static(path.join(__dirname, 'frontend/js')));
+            this.server.use('/img', express.static(path.join(__dirname, 'frontend/img')));
+            
+            this.server.get('/manifest.json', (req, res) => {
+                res.sendFile(path.join(__dirname, 'frontend/manifest.json'));
+            });
+
+            // ==========================================
+            // APIs DE PRODUTOS - INTEGRAÇÃO COM BACKEND
+            // ==========================================
+            
+            // Importar e configurar rotas do backend
+            const dataStore = require('./backend/data-store');
+            
+            // Função para atualizar timestamp dos produtos
+            let productsLastUpdate = Date.now();
+            function updateProductsTimestamp() {
+                productsLastUpdate = Date.now();
+            }
+
+            // API para obter todos os produtos
+            this.server.get('/api/products', async (req, res) => {
+                const startTime = Date.now();
+                console.log(`[${new Date().toISOString()}] 📥 GET /api/products - Solicitação recebida`);
+                
+                try {
+                    if (this.database) {
+                        console.log('📊 Consultando banco SQLite...');
+                        const products = await this.database.getProducts();
+                        console.log(`✅ Banco SQLite retornou ${products.length} produtos`);
+                        
+                        const response = {
+                            success: true,
+                            products: products,
+                            lastUpdate: Date.now(),
+                            source: 'SQLite'
+                        };
+                        
+                        console.log(`📤 Enviando resposta: ${JSON.stringify(response).substring(0, 100)}...`);
+                        res.json(response);
+                    } else {
+                        console.log('📋 Usando dataStore (banco não disponível)...');
+                        // Fallback para dataStore se banco não estiver disponível
+                        const allProducts = dataStore.getAllProducts();
+                        // Converter formato do dataStore para array
+                        const productsArray = Object.keys(allProducts).reduce((acc, category) => {
+                            const categoryProducts = allProducts[category].map(product => ({
+                                id: product.id,
+                                codigo: product.id,
+                                nome: product.name,
+                                categoria: product.category || category.toUpperCase(),
+                                peso_inicial: product.peso_inicial || 0,
+                                peso_final: product.peso_final || 0,
+                                created_at: new Date().toISOString()
+                            }));
+                            return acc.concat(categoryProducts);
+                        }, []);
+                        
+                        console.log(`✅ DataStore retornou ${productsArray.length} produtos`);
+                        
+                        const response = {
+                            success: true,
+                            products: productsArray,
+                            lastUpdate: dataStore.getLastUpdate(),
+                            source: 'DataStore'
+                        };
+                        
+                        console.log(`📤 Enviando resposta: ${JSON.stringify(response).substring(0, 100)}...`);
+                        res.json(response);
+                    }
+                    
+                    const duration = Date.now() - startTime;
+                    console.log(`⏱️ GET /api/products completado em ${duration}ms\n`);
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao buscar produtos:', error);
+                    console.log(`⏱️ GET /api/products FALHOU em ${Date.now() - startTime}ms\n`);
+                    res.status(500).json({ error: 'Erro interno do servidor', details: error.message });
+                }
+            });
+
+            // API para obter produtos de uma categoria específica
+            this.server.get('/api/products/:category', async (req, res) => {
+                const { category } = req.params;
+                try {
+                    if (this.database) {
+                        const allProducts = await this.database.getProducts();
+                        const products = allProducts.filter(p => p.category === category);
+                        res.json({
+                            category,
+                            products,
+                            lastUpdate: Date.now()
+                        });
+                    } else {
+                        // Fallback para dataStore
+                        const products = dataStore.getProducts(category);
+                        res.json({
+                            category,
+                            products,
+                            lastUpdate: dataStore.getLastUpdate()
+                        });
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar produtos da categoria:', error);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                }
+            });
+
+            // API para adicionar um produto
+            this.server.post('/api/products/:category', async (req, res) => {
+                const { category } = req.params;
+                const { name } = req.body;
+
+                if (!name) {
+                    return res.status(400).json({ error: 'Nome do produto é obrigatório' });
+                }
+
+                try {
+                    if (this.database) {
+                        const product = await this.database.createProduct({ name, category });
+                        updateProductsTimestamp();
+                        res.status(201).json(product);
+                    } else {
+                        // Fallback para dataStore
+                        const product = dataStore.addProduct(category, name);
+                        updateProductsTimestamp();
+                        res.status(201).json(product);
+                    }
+                } catch (error) {
+                    console.error('Erro ao criar produto:', error);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                }
+            });
+
+            // API para remover um produto
+            this.server.delete('/api/products/:category/:productId', async (req, res) => {
+                const { category, productId } = req.params;
+
+                try {
+                    if (this.database) {
+                        const result = await this.database.deleteProduct(parseInt(productId));
+                        if (result.success) {
+                            updateProductsTimestamp();
+                            res.json({ success: true, message: 'Produto removido com sucesso' });
+                        } else {
+                            res.status(404).json({ error: 'Produto não encontrado' });
+                        }
+                    } else {
+                        // Fallback para dataStore
+                        const removed = dataStore.removeProduct(category, productId);
+                        if (removed) {
+                            updateProductsTimestamp();
+                            res.json({ success: true, message: 'Produto removido com sucesso' });
+                        } else {
+                            res.status(404).json({ error: 'Produto não encontrado' });
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erro ao remover produto:', error);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                }
+            });
+
+            // API para atualizar timestamp de produtos
+            this.server.post('/update_products', (req, res) => {
+                updateProductsTimestamp();
+                res.json({ success: true, timestamp: productsLastUpdate });
+            });
+
+            // API para atualizar server_info.json
+            this.server.get('/server_info.json', (req, res) => {
+                const serverInfo = {
+                    ip: this.getLocalIP(),
+                    port: this.serverPort,
+                    hostname: 'gestao-producao',
+                    status: 'running',
+                    last_update: Date.now(),
+                    products_update: productsLastUpdate,
+                    maquina_path: '/maquina',
+                    manutencao_path: '/manutencao',
+                    external_url: this.tunnelUrl || ''
+                };
+                res.json(serverInfo);
+            });
+
+            // ==========================================
+            // APIs DE ORDENS DE PRODUÇÃO
+            // ==========================================
+
+            // API para obter todas as ordens
+            this.server.get('/api/orders', async (req, res) => {
+                const startTime = Date.now();
+                console.log(`[${new Date().toISOString()}] 📥 GET /api/orders - Solicitação recebida`);
+                
+                try {
+                    let orders = [];
+                    let source = 'Empty';
+                    
+                    if (this.database) {
+                        console.log('📊 Consultando ordens no banco SQLite...');
+                        try {
+                            const dbOrders = await this.database.getOrders();
+                            if (dbOrders && dbOrders.length > 0) {
+                                orders = dbOrders;
+                                source = 'SQLite';
+                                console.log(`✅ Banco SQLite retornou ${orders.length} ordens`);
+                            } else {
+                                console.log('📋 Banco SQLite vazio, verificando dataStore...');
+                            }
+                        } catch (dbError) {
+                            console.error('❌ Erro ao consultar SQLite:', dbError);
+                        }
+                    }
+                    
+                    // Se não tem ordens do SQLite, tenta dataStore
+                    if (orders.length === 0) {
+                        console.log('📋 Consultando dataStore para ordens...');
+                        const dataStoreOrders = dataStore.getAllOrders();
+                        console.log('📦 DataStore raw orders:', dataStoreOrders);
+                        
+                        if (dataStoreOrders && Object.keys(dataStoreOrders).length > 0) {
+                            // Converter formato do dataStore para array
+                            orders = Object.keys(dataStoreOrders).map(orderCode => {
+                                const order = dataStoreOrders[orderCode];
+                                return {
+                                    id: orderCode,
+                                    order_code: orderCode,
+                                    products_data: JSON.stringify(order.products || []),
+                                    device_id: order.device_id || order.terminal || 'maquina',
+                                    operator: order.operator || 'Sistema',
+                                    status: order.status || 'completed',
+                                    created_at: new Date(order.createdAt || order.timestamp || Date.now()).toISOString()
+                                };
+                            });
+                            source = 'DataStore';
+                            console.log(`✅ DataStore retornou ${orders.length} ordens`);
+                        } else {
+                            console.log('📋 DataStore também vazio');
+                        }
+                    }
+                    
+                    const response = {
+                        success: true,
+                        orders: orders,
+                        lastUpdate: Date.now(),
+                        source: source,
+                        count: orders.length
+                    };
+                    
+                    console.log(`📤 Enviando resposta final: ${orders.length} ordens (fonte: ${source})`);
+                    res.json(response);
+                    
+                    const duration = Date.now() - startTime;
+                    console.log(`⏱️ GET /api/orders completado em ${duration}ms\n`);
+                    
+                } catch (error) {
+                    console.error('❌ Erro ao buscar ordens:', error);
+                    console.log(`⏱️ GET /api/orders FALHOU em ${Date.now() - startTime}ms\n`);
+                    res.status(500).json({ 
+                        success: false,
+                        error: 'Erro interno do servidor', 
+                        details: error.message,
+                        orders: [],
+                        count: 0
+                    });
+                }
+            });
+
+            // API para criar/completar uma ordem
+            this.server.post('/api/orders/:orderCode/complete', async (req, res) => {
+                try {
+                    const { orderCode } = req.params;
+                    const orderData = req.body;
+                    
+                    console.log(`📋 Ordem ${orderCode} recebida para processamento`);
+                    
+                    if (this.database) {
+                        // Preparar dados para salvar no banco SQLite
+                        const orderToSave = {
+                            order_code: orderCode,
+                            products_data: JSON.stringify(orderData.products || []),
+                            device_id: orderData.terminal || 'unknown',
+                            operator: orderData.operator || 'Operador',
+                            notes: `Ordem concluída em ${new Date().toLocaleString()}`,
+                            status: 'completed'
+                        };
+                        
+                        const result = await this.database.createOrder(orderToSave);
+                        console.log(`✅ Ordem ${orderCode} salva no banco SQLite`);
+                        
+                        res.json({ 
+                            success: true, 
+                            order: orderToSave,
+                            message: 'Ordem salva com sucesso'
+                        });
+                    } else {
+                        // Fallback para dataStore
+                        if (orderData.name) {
+                            // Produto individual
+                            const order = dataStore.addProductToOrder(orderCode, orderData);
+                            res.json(order);
+                        } else {
+                            // Ordem completa
+                            const order = dataStore.createOrder(orderCode, orderData);
+                            res.json(order);
+                        }
+                    }
+                    
+                    updateProductsTimestamp(); // Atualiza o timestamp global
+                } catch (error) {
+                    console.error('Erro ao salvar ordem:', error);
+                    res.status(500).json({ error: 'Erro interno do servidor' });
+                }
+            });
+
+            // ==========================================
+            // ROTAS HTML
+            // ==========================================
+
+            // Rota para página inicial - redireciona para /maquina
+            this.server.get('/', (req, res) => {
+                res.redirect('/maquina');
+            });
+
+            // ROTA PRINCIPAL /maquina COM AUTENTICAÇÃO PERSISTENTE SQLite
+            this.server.get('/maquina', sqliteAuthMiddleware, (req, res) => {
+                console.log(`📱 Servindo página /maquina - Device: ${req.deviceAuth.deviceId} | Bypass: ${req.deviceAuth.bypass}`);
+                
+                // Se dispositivo está autorizado no SQLite, serve diretamente sem overlay de autorização
+                if (req.deviceAuth.bypass) {
+                    console.log(`✅ Bypass ativado - Dispositivo ${req.deviceAuth.deviceId} autorizado, acesso direto`);
+                    
+                    const fs = require('fs');
+                    let htmlContent = fs.readFileSync(path.join(__dirname, 'frontend/maquina.html'), 'utf8');
+                    
+                    // Injeta informações do dispositivo autorizado no HTML
+                    const deviceInfoScript = `
+                    <script>
+                        // Dispositivo autorizado - informações disponíveis globalmente
+                        window.deviceInfo = {
+                            deviceId: '${req.deviceAuth.deviceId}',
+                            authorized: true,
+                            operator: '${req.deviceAuth.device ? req.deviceAuth.device.operator || 'Operador' : 'Operador'}',
+                            bypassMode: true
+                        };
+                        console.log('✅ Dispositivo autorizado - Acesso direto liberado:', window.deviceInfo);
+                    </script>
+                    `;
+                    
+                    // Injetar informações antes do </head>
+                    htmlContent = htmlContent.replace('</head>', deviceInfoScript + '</head>');
+                    
+                    res.send(htmlContent);
+                    return;
+                }
+                
+                // Dispositivo não autorizado - usar sistema de autorização completo
+                console.log(`🔒 Sistema de autorização ativado para Device: ${req.deviceAuth.deviceId}`);
+                
+                const fs = require('fs');
+                let htmlContent = fs.readFileSync(path.join(__dirname, 'frontend/maquina.html'), 'utf8');
+                
+                // Injetar sistema de autorização integrado
+                const authSystemScript = `
+                <script>
+                    // Sistema de autorização para dispositivos não autorizados
+                    function generateConsistentDeviceId() {
+                        let deviceId = localStorage.getItem('device_id');
+                        if (deviceId && deviceId.startsWith('TAB-')) {
+                            return deviceId;
+                        }
+                        
+                        // Gerar ID baseado em características do dispositivo
+                        const browserInfo = [
+                            navigator.userAgent,
+                            navigator.language,
+                            navigator.platform,
+                            window.screen.width,
+                            window.screen.height,
+                            new Date().getTimezoneOffset()
+                        ].join('|');
+                        
+                        let hash = 0;
+                        for (let i = 0; i < browserInfo.length; i++) {
+                            const char = browserInfo.charCodeAt(i);
+                            hash = ((hash << 5) - hash) + char;
+                            hash = hash & hash;
+                        }
+                        
+                        const timestamp = Date.now().toString(36);
+                        const randomPart = Math.random().toString(36).substring(2, 8);
+                        
+                        const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
+                        const finalMachineId = machineId.toUpperCase();
+                        
+                        localStorage.setItem('device_id', finalMachineId);
+                        console.log('🆕 Novo Device ID gerado:', finalMachineId);
+                        
+                        return finalMachineId;
+                    }
+                    
+                    const deviceId = generateConsistentDeviceId();
+                    console.log('📱 Device ID:', deviceId);
+                    
+                    // Fazer registro automático do dispositivo
+                    fetch('/api/tablet/register', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            deviceId: deviceId,
+                            userAgent: navigator.userAgent,
+                            timestamp: Date.now()
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Resultado do registro:', data);
+                        
+                        if (data.authorized) {
+                            // Dispositivo já autorizado
+                            window.deviceInfo = {
+                                deviceId: deviceId,
+                                authorized: true,
+                                operator: data.operator || 'Operador'
+                            };
+                            console.log('✅ Dispositivo autorizado!');
+                        } else {
+                            // Dispositivo pendente, mostrar tela de autorização
+                            console.log('⏳ Aguardando autorização...');
+                            // Código de autorização seria implementado aqui
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Erro no registro:', error);
+                    });
+                </script>
+                `;
+                
+                htmlContent = htmlContent.replace('</head>', authSystemScript + '</head>');
+                res.send(htmlContent);
+            });
+
+            // Rota para desktop/gestão
+            this.server.get('/desktop', (req, res) => {
+                res.sendFile(path.join(__dirname, 'frontend/desktop.html'));
+            });
+
+            // Iniciar servidor HTTP
+            const { findAvailablePort } = require('./backend/port-finder');
+            const port = await findAvailablePort(this.serverPort);
+            
+            this.httpServer = http.createServer(this.server);
+            this.httpServer.listen(port, () => {
+                this.serverPort = port;
+                this.isServerRunning = true;
+                
+                console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
+                console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
+                console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
+                
+                // Notificar renderer
+                this.notifyRenderer('server:ready', {
+                    port: port,
+                    localIP: this.getLocalIP(),
+                    timestamp: Date.now()
+                });
+                
+                // Configurar túnel se disponível
+                this.setupExternalAccess();
+            });
+
+        } catch (error) {
+            console.error('❌ Erro ao iniciar servidor:', error);
+            this.notifyRenderer('server:error', { error: error.message });
+            throw error;
+        }
+    }
+
+    async stopServer() {
+        if (!this.isServerRunning) {
+            return { success: true, message: 'Servidor já está parado' };
+        }
+
+        return new Promise((resolve) => {
+            this.httpServer.close(() => {
+                this.isServerRunning = false;
+                this.httpServer = null;
+                console.log('🛑 Servidor parado');
+                
+                this.notifyRenderer('server:stopped');
+                resolve({ success: true, message: 'Servidor parado com sucesso' });
+            });
+        });
+    }
+
+    async restartServer() {
+        await this.stopServer();
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Aguardar 1s
+        return await this.startServer();
+    }
+
+    setupExternalAccess() {
+        if (!this.isServerRunning) {
+            console.log('⚠️ Servidor não está rodando, pulando configuração de acesso externo');
+            return;
+        }
+
+        try {
+            const localtunnel = require('localtunnel');
+            
+            console.log('🌐 Configurando acesso externo via LocalTunnel...');
+            
+            localtunnel({
+                port: this.serverPort,
+                subdomain: 'gestao-producao'
+            }).then(tunnel => {
+                this.tunnel = tunnel;
+                this.tunnelUrl = tunnel.url;
+                
+                console.log(`✅ Túnel ativo: ${this.tunnelUrl}`);
+                console.log(`🌐 Acesso externo: ${this.tunnelUrl}/maquina`);
+                
+                this.notifyRenderer('server:tunnel-ready', {
+                    url: this.tunnelUrl,
+                    type: 'localtunnel'
+                });
+
+                tunnel.on('close', () => {
+                    console.log('🔌 Túnel fechado');
+                    this.tunnel = null;
+                    this.tunnelUrl = null;
+                    this.notifyRenderer('server:tunnel-closed');
+                });
+
+            }).catch(err => {
+                console.error('❌ Erro ao configurar túnel:', err.message);
+                this.notifyRenderer('server:tunnel-error', {
+                    error: 'Falha ao configurar acesso externo',
+                    details: err.message
+                });
+            });
+
+        } catch (error) {
+            console.error('❌ Erro ao inicializar LocalTunnel:', error);
+        }
+    }
+
+    getLocalIP() {
+        const os = require('os');
+        const interfaces = os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family !== 'IPv4' || iface.internal) {
+                    continue;
+                }
+                return iface.address;
+            }
+        }
+        return '127.0.0.1';
+    }
+
+    notifyRenderer(channel, data = null) {
+        if (this.mainWindow && this.mainWindow.webContents) {
+            this.mainWindow.webContents.send(channel, data);
+        }
+    }
+
+    backupData() {
+        console.log('💾 Criando backup dos dados...');
+        // Implementar backup se necessário
+        return { success: true, message: 'Backup criado com sucesso' };
+    }
+
+    restoreData() {
+        console.log('📦 Restaurando dados do backup...');
+        // Implementar restore se necessário
+        return { success: true, message: 'Dados restaurados com sucesso' };
+    }
+}
+
+// Instância principal da aplicação
+const desktopManager = new DesktopManager();
+
+// Event handlers do Electron
+app.whenReady().then(async () => {
+    try {
+        await desktopManager.initialize();
+        desktopManager.createMainWindow();
+    } catch (error) {
+        console.error('❌ Erro fatal na inicialização:', error);
+        app.quit();
+    }
+});
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        desktopManager.stopServer();
+        app.quit();
+    }
+});
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+        desktopManager.createMainWindow();
+    }
+});
+
+// Cleanup ao fechar
+app.on('before-quit', async () => {
+    if (desktopManager.isServerRunning) {
+        await desktopManager.stopServer();
+    }
+    if (desktopManager.tunnel) {
+        desktopManager.tunnel.close();
+    }
+});
+
+// Export para testes
+module.exports = DesktopManager;

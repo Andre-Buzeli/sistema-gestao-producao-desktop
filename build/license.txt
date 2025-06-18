@@ -1,0 +1,17 @@
+SISTEMA DE GESTÃO DE PRODUÇÃO
+Copyright © 2025 Sistema de Gestão
+
+Este software é fornecido "como está", sem garantias de qualquer tipo.
+
+TERMOS DE USO:
+1. Este software é destinado ao controle e gestão de produção industrial.
+2. O usuário é responsável pela configuração adequada e backup dos dados.
+3. O uso deste software é por conta e risco do usuário.
+
+LIMITAÇÃO DE RESPONSABILIDADE:
+Em nenhuma circunstância o desenvolvedor será responsável por qualquer dano direto, indireto, acidental, especial ou consequencial decorrente do uso ou incapacidade de usar este software.
+
+SUPORTE:
+Para suporte técnico, consulte a documentação incluída ou entre em contato com o fornecedor.
+
+Ao instalar este software, você concorda com os termos acima. 

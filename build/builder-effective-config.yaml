@@ -1,0 +1,49 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.gestao.producao.desktop
+productName: Sistema de Gestão de Produção
+copyright: Copyright © 2025 Sistema de Gestão
+publish:
+  - provider: github
+    owner: Andre-Buzeli
+    repo: sistema-gestao-producao-desktop
+files:
+  - filter:
+      - main.js
+      - preload.js
+      - frontend/**/*
+      - backend/**/*
+      - database/**/*
+      - '!**/*.map'
+      - '!**/node_modules/.cache'
+      - '!**/node_modules/electron/**'
+      - '!**/node_modules/@electron/**'
+extraResources:
+  - from: database/
+    to: database/
+    filter:
+      - '**/*'
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+  icon: build/factory-icon.png
+  requestedExecutionLevel: asInvoker
+  forceCodeSigning: false
+  signAndEditExecutable: false
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  allowElevation: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  displayLanguageSelector: true
+  license: build/license.txt
+portable:
+  artifactName: ${productName}-${version}-portable.exe
+electronVersion: 36.4.0
