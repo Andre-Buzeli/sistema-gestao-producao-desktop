@@ -175,6 +175,7 @@ class DesktopManager {
         this.tunnel = null;
         this.tunnelUrl = null;
         this.initialized = false; // Flag de inicialização
+        this.sqliteAuthMiddleware = null; // Middleware de autenticação
     }
 
     async initialize() {
@@ -923,7 +924,7 @@ class DesktopManager {
             console.log('🚀 ==> STARTSERVER - Passo 10: Importando middleware SQLite');
             try {
                 const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
-                const sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
+                this.sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
                 console.log('🚀 ==> STARTSERVER - Passo 11: Middleware SQLite importado com sucesso');
             } catch (middlewareError) {
                 console.error('❌ ERRO ao importar middleware SQLite:', middlewareError);
@@ -1384,10 +1385,88 @@ class DesktopManager {
             });
 
             // ROTA PRINCIPAL /maquina COM AUTENTICAÇÃO PERSISTENTE SQLite
-            this.server.get('/maquina', sqliteAuthMiddleware, (req, res) => {
-                console.log(`📱 Servindo página /maquina - Device: ${req.deviceAuth.deviceId} | Bypass: ${req.deviceAuth.bypass}`);
+            this.server.get('/maquina', this.sqliteAuthMiddleware, (req, res) => {
+                console.log(`📱 Servindo página /maquina - Device: ${req.deviceAuth.deviceId} | Bypass: ${req.deviceAuth.bypass} | Status: ${req.deviceAuth.status}`);
                 
-                // Se dispositivo está autorizado no SQLite, serve diretamente sem overlay de autorização
+                // CENÁRIO 1: SEM DEVICE ID - Forçar geração e reload
+                if (!req.deviceAuth.deviceId || req.deviceAuth.status === 'waiting_frontend') {
+                    console.log(`🚫 ACESSO BLOQUEADO - Nenhum Device ID fornecido, redirecionando para geração`);
+                    
+                    // Retorna página que força geração de Device ID e recarrega
+                    const deviceIdGenerationPage = `
+                    <!DOCTYPE html>
+                    <html lang="pt-BR">
+                    <head>
+                        <meta charset="UTF-8">
+                        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                        <title>Configurando Terminal...</title>
+                        <style>
+                            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f0f0f0; }
+                            .loading { font-size: 24px; margin: 20px; }
+                            .spinner { animation: spin 1s linear infinite; font-size: 30px; }
+                            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                        </style>
+                    </head>
+                    <body>
+                        <h1>🔧 Configurando Terminal</h1>
+                        <div class="loading">
+                            <div class="spinner">⚙️</div>
+                            <p>Gerando identificação do dispositivo...</p>
+                        </div>
+                        
+                        <script>
+                            function generateConsistentDeviceId() {
+                                let deviceId = localStorage.getItem('device_id');
+                                if (deviceId && deviceId.startsWith('TAB-')) {
+                                    return deviceId;
+                                }
+                                
+                                // Gerar ID baseado em características do dispositivo
+                                const browserInfo = [
+                                    navigator.userAgent,
+                                    navigator.language,
+                                    navigator.platform,
+                                    window.screen.width,
+                                    window.screen.height,
+                                    new Date().getTimezoneOffset()
+                                ].join('|');
+                                
+                                let hash = 0;
+                                for (let i = 0; i < browserInfo.length; i++) {
+                                    const char = browserInfo.charCodeAt(i);
+                                    hash = ((hash << 5) - hash) + char;
+                                    hash = hash & hash;
+                                }
+                                
+                                const timestamp = Date.now().toString(36);
+                                const randomPart = Math.random().toString(36).substring(2, 8);
+                                
+                                const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
+                                const finalMachineId = machineId.toUpperCase();
+                                
+                                localStorage.setItem('device_id', finalMachineId);
+                                document.cookie = 'device_id=' + finalMachineId + '; path=/; max-age=31536000';
+                                console.log('🆕 Device ID gerado:', finalMachineId);
+                                
+                                return finalMachineId;
+                            }
+                            
+                            // Gerar Device ID e recarregar página
+                            setTimeout(() => {
+                                const deviceId = generateConsistentDeviceId();
+                                console.log('🔄 Recarregando página com Device ID:', deviceId);
+                                window.location.reload();
+                            }, 2000);
+                        </script>
+                    </body>
+                    </html>
+                    `;
+                    
+                    res.send(deviceIdGenerationPage);
+                    return;
+                }
+                
+                // CENÁRIO 2: DEVICE ID AUTORIZADO - Acesso direto
                 if (req.deviceAuth.bypass) {
                     console.log(`✅ Bypass ativado - Dispositivo ${req.deviceAuth.deviceId} autorizado, acesso direto`);
                     
@@ -1415,92 +1494,102 @@ class DesktopManager {
                     return;
                 }
                 
-                // Dispositivo não autorizado - usar sistema de autorização completo
-                console.log(`🔒 Sistema de autorização ativado para Device: ${req.deviceAuth.deviceId}`);
+                // CENÁRIO 3: DEVICE ID NÃO AUTORIZADO - Tela de autorização
+                console.log(`🔒 Dispositivo ${req.deviceAuth.deviceId} aguardando autorização - Bloqueando acesso`);
                 
-                const fs = require('fs');
-                let htmlContent = fs.readFileSync(path.join(__dirname, 'frontend/maquina.html'), 'utf8');
-                
-                // Injetar sistema de autorização integrado
-                const authSystemScript = `
-                <script>
-                    // Sistema de autorização para dispositivos não autorizados
-                    function generateConsistentDeviceId() {
-                        let deviceId = localStorage.getItem('device_id');
-                        if (deviceId && deviceId.startsWith('TAB-')) {
-                            return deviceId;
+                // Retorna página de autorização que bloqueia acesso até aprovação
+                const authorizationPage = `
+                <!DOCTYPE html>
+                <html lang="pt-BR">
+                <head>
+                    <meta charset="UTF-8">
+                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                    <title>Terminal - Aguardando Autorização</title>
+                    <style>
+                        body { 
+                            font-family: Arial, sans-serif; text-align: center; 
+                            padding: 50px; background: #fff3cd; margin: 0; 
                         }
-                        
-                        // Gerar ID baseado em características do dispositivo
-                        const browserInfo = [
-                            navigator.userAgent,
-                            navigator.language,
-                            navigator.platform,
-                            window.screen.width,
-                            window.screen.height,
-                            new Date().getTimezoneOffset()
-                        ].join('|');
-                        
-                        let hash = 0;
-                        for (let i = 0; i < browserInfo.length; i++) {
-                            const char = browserInfo.charCodeAt(i);
-                            hash = ((hash << 5) - hash) + char;
-                            hash = hash & hash;
+                        .auth-container { 
+                            max-width: 500px; margin: 0 auto; 
+                            background: white; padding: 30px; 
+                            border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                         }
+                        .device-id { 
+                            font-family: monospace; font-size: 18px; 
+                            background: #f8f9fa; padding: 10px; 
+                            border-radius: 5px; margin: 20px 0; 
+                        }
+                        .status { font-size: 16px; margin: 20px 0; }
+                        .pending { color: #856404; }
+                        .checking { animation: pulse 1.5s infinite; }
+                        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+                    </style>
+                </head>
+                <body>
+                    <div class="auth-container">
+                        <h1>🔐 Terminal Aguardando Autorização</h1>
+                        <p>Este dispositivo precisa ser autorizado pelo administrador para acessar o sistema.</p>
                         
-                        const timestamp = Date.now().toString(36);
-                        const randomPart = Math.random().toString(36).substring(2, 8);
+                        <div class="device-id">
+                            <strong>ID do Dispositivo:</strong><br>
+                            ${req.deviceAuth.deviceId}
+                        </div>
                         
-                        const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
-                        const finalMachineId = machineId.toUpperCase();
+                        <div class="status pending checking" id="status">
+                            ⏳ Aguardando autorização do administrador...
+                        </div>
                         
-                        localStorage.setItem('device_id', finalMachineId);
-                        console.log('🆕 Novo Device ID gerado:', finalMachineId);
-                        
-                        return finalMachineId;
-                    }
+                        <p style="font-size: 14px; color: #666;">
+                            Esta tela atualizará automaticamente quando o dispositivo for autorizado.
+                        </p>
+                    </div>
                     
-                    const deviceId = generateConsistentDeviceId();
-                    console.log('📱 Device ID:', deviceId);
-                    
-                    // Fazer registro automático do dispositivo
-                    fetch('/api/tablet/register', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({
-                            deviceId: deviceId,
-                            userAgent: navigator.userAgent,
-                            timestamp: Date.now()
-                        })
-                    })
-                    .then(response => response.json())
-                    .then(data => {
-                        console.log('Resultado do registro:', data);
+                    <script>
+                        const deviceId = '${req.deviceAuth.deviceId}';
                         
-                        if (data.authorized) {
-                            // Dispositivo já autorizado
-                            window.deviceInfo = {
+                        // Registrar dispositivo no sistema
+                        fetch('/api/tablet/register', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
                                 deviceId: deviceId,
-                                authorized: true,
-                                operator: data.operator || 'Operador'
-                            };
-                            console.log('✅ Dispositivo autorizado!');
-                        } else {
-                            // Dispositivo pendente, mostrar tela de autorização
-                            console.log('⏳ Aguardando autorização...');
-                            // Código de autorização seria implementado aqui
+                                userAgent: navigator.userAgent,
+                                timestamp: Date.now()
+                            })
+                        }).then(response => response.json())
+                        .then(data => {
+                            console.log('Dispositivo registrado:', data);
+                        });
+                        
+                        // Verificar status de autorização a cada 3 segundos
+                        function checkAuthStatus() {
+                            fetch('/api/tablet/status/' + deviceId)
+                            .then(response => response.json())
+                            .then(data => {
+                                console.log('Status:', data);
+                                if (data.authorized) {
+                                    document.getElementById('status').innerHTML = '✅ Dispositivo autorizado! Redirecionando...';
+                                    document.getElementById('status').className = 'status';
+                                    setTimeout(() => {
+                                        window.location.reload();
+                                    }, 2000);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Erro ao verificar status:', error);
+                            });
                         }
-                    })
-                    .catch(error => {
-                        console.error('Erro no registro:', error);
-                    });
-                </script>
+                        
+                        // Verificar status imediatamente e a cada 3 segundos
+                        checkAuthStatus();
+                        setInterval(checkAuthStatus, 3000);
+                    </script>
+                </body>
+                </html>
                 `;
                 
-                htmlContent = htmlContent.replace('</head>', authSystemScript + '</head>');
-                res.send(htmlContent);
+                res.send(authorizationPage);
             });
 
             // Rota para desktop/gestão
