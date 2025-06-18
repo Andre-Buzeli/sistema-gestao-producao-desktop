@@ -4,7 +4,18 @@ const fs = require('fs');
 
 class Database {
     constructor() {
-        this.dbPath = path.join(__dirname, 'gestao_producao.db');
+        // Usar diretório de dados do usuário para o banco em aplicações empacotadas
+        const { app } = require('electron');
+        if (app && app.isPackaged) {
+            // Em produção: usar pasta de dados do usuário
+            const userDataPath = app.getPath('userData');
+            this.dbPath = path.join(userDataPath, 'gestao_producao.db');
+            console.log(`📁 Banco em produção: ${this.dbPath}`);
+        } else {
+            // Em desenvolvimento: usar pasta local
+            this.dbPath = path.join(__dirname, 'gestao_producao.db');
+            console.log(`📁 Banco em desenvolvimento: ${this.dbPath}`);
+        }
         this.db = null;
     }
 
