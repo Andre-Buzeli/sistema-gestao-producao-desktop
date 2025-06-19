@@ -3,24 +3,64 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const ConfigManager = require('./config-manager');
 
 class AutoUpdaterManager {
-    constructor() {
+    constructor(configManager = null) {
+        this.configManager = configManager;
         this.isUpdating = false;
         this.updateInfo = null;
         this.progressInfo = null;
         this.listeners = new Map();
+        this.lastCheckTime = null;
+        this.availableReleases = new Map(); // Cache de releases disponíveis por canal
+        
+        // Configuração será carregada do ConfigManager
         this.configuration = {
             autoDownload: false,
             autoInstallOnAppQuit: true,
             allowDowngrade: false,
             allowPrerelease: false,
             checkInterval: 4 * 60 * 60 * 1000, // 4 horas
-            initialCheckDelay: 5000 // 5 segundos após inicialização
+            initialCheckDelay: 5000, // 5 segundos após inicialização
+            githubRepo: 'Andre-Buzeli/sistema-gestao-producao-desktop'
         };
         
         this.setupLogger();
+        this.initializeWithConfig();
+    }
+
+    async initializeWithConfig() {
+        // Se não foi passado ConfigManager, criar um temporário
+        if (!this.configManager) {
+            this.configManager = new ConfigManager();
+            await this.configManager.initialize();
+        }
+        
+        // Carregar configurações do canal
+        this.loadConfigurationFromManager();
+        
+        this.setupLogger();
         this.setupAutoUpdater();
+    }
+
+    loadConfigurationFromManager() {
+        if (!this.configManager) return;
+        
+        const config = this.configManager.getAll();
+        
+        // Atualizar configuração baseada no ConfigManager
+        this.configuration.autoDownload = config.autoUpdate && config.channelConfig[config.updateChannel]?.autoInstall;
+        this.configuration.autoInstallOnAppQuit = config.autoInstallOnQuit;
+        this.configuration.allowPrerelease = config.channelConfig[config.updateChannel]?.acceptPrerelease || false;
+        this.configuration.checkInterval = config.checkUpdateInterval;
+        
+        this.log && this.log.info('🔧 Configuração carregada do ConfigManager:', {
+            channel: config.updateChannel,
+            autoDownload: this.configuration.autoDownload,
+            allowPrerelease: this.configuration.allowPrerelease
+        });
     }
 
     setupLogger() {
@@ -38,8 +78,8 @@ class AutoUpdaterManager {
         autoUpdater.logger = log;
         autoUpdater.logger.transports.file.level = 'info';
         
-        this.log = log;
-        this.log.info('🔄 AutoUpdaterManager inicializado');
+        this.log = log.scope('AutoUpdater');
+        this.log.info('🔄 AutoUpdaterManager inicializado com suporte a canais');
     }
 
     setupAutoUpdater() {
@@ -269,12 +309,226 @@ class AutoUpdaterManager {
         }
 
         try {
-            this.log.info('🔍 Iniciando verificação de atualizações...');
+            this.lastCheckTime = new Date();
+            this.log.info('🔍 Iniciando verificação inteligente de atualizações...');
+            
+            // Recarregar configuração antes de verificar
+            this.loadConfigurationFromManager();
+            
+            const currentChannel = this.configManager.getUpdateChannel();
+            this.log.info(`📡 Verificando canal: ${currentChannel}`);
+            
+            // Verificar releases do GitHub primeiro
+            const githubReleases = await this.fetchGitHubReleases();
+            const channelUpdate = this.findUpdateForChannel(githubReleases, currentChannel);
+            
+            if (channelUpdate) {
+                this.log.info('📥 Atualização encontrada via GitHub:', {
+                    version: channelUpdate.tag_name,
+                    channel: currentChannel,
+                    prerelease: channelUpdate.prerelease
+                });
+                
+                this.updateInfo = this.convertGitHubReleaseToUpdateInfo(channelUpdate);
+                this.emit('update-available', this.updateInfo);
+                await this.handleUpdateAvailable(this.updateInfo);
+                return this.updateInfo;
+            }
+            
+            // Fallback para electron-updater padrão se não encontrou no GitHub
+            this.log.info('🔄 Fallback para electron-updater padrão...');
             return await autoUpdater.checkForUpdatesAndNotify();
+            
         } catch (error) {
             this.log.error('❌ Erro ao verificar atualizações:', error);
-            throw error;
+            // Fallback para método padrão em caso de erro
+            try {
+                return await autoUpdater.checkForUpdatesAndNotify();
+            } catch (fallbackError) {
+                this.log.error('❌ Erro também no fallback:', fallbackError);
+                throw error;
+            }
         }
+    }
+
+    async fetchGitHubReleases() {
+        return new Promise((resolve, reject) => {
+            const url = `https://api.github.com/repos/${this.configuration.githubRepo}/releases`;
+            
+            this.log.info('🌐 Buscando releases do GitHub:', url);
+            
+            const req = https.get(url, {
+                headers: {
+                    'User-Agent': 'Sistema-Gestao-Producao-Desktop',
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            }, (res) => {
+                let data = '';
+                
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode === 200) {
+                            const releases = JSON.parse(data);
+                            this.log.info(`✅ ${releases.length} releases encontradas no GitHub`);
+                            resolve(releases);
+                        } else {
+                            this.log.error(`❌ Erro HTTP ${res.statusCode} ao buscar releases`);
+                            reject(new Error(`HTTP ${res.statusCode}`));
+                        }
+                    } catch (parseError) {
+                        this.log.error('❌ Erro ao parsear resposta do GitHub:', parseError);
+                        reject(parseError);
+                    }
+                });
+            });
+            
+            req.on('error', (error) => {
+                this.log.error('❌ Erro de rede ao buscar releases:', error);
+                reject(error);
+            });
+            
+            req.setTimeout(10000, () => {
+                req.destroy();
+                reject(new Error('Timeout na requisição do GitHub'));
+            });
+        });
+    }
+
+    findUpdateForChannel(releases, channel) {
+        if (!releases || releases.length === 0) {
+            this.log.info('📭 Nenhuma release encontrada');
+            return null;
+        }
+        
+        const currentVersion = app.getVersion();
+        const channelConfig = this.configManager.getChannelConfig(channel);
+        
+        this.log.info('🔍 Procurando atualização:', {
+            currentVersion,
+            channel,
+            acceptPrerelease: channelConfig.acceptPrerelease,
+            tagPattern: channelConfig.tagPattern.toString()
+        });
+        
+        // Filtrar releases baseado no canal
+        const validReleases = releases.filter(release => {
+            // Verificar se é o tipo correto de release para o canal
+            if (channel === 'release') {
+                return !release.prerelease && !release.draft;
+            } else {
+                // Para alpha e beta, precisa ser prerelease
+                if (!release.prerelease || release.draft) return false;
+                
+                // Verificar se a tag corresponde ao padrão do canal
+                return channelConfig.tagPattern.test(release.tag_name);
+            }
+        });
+        
+        this.log.info(`📋 ${validReleases.length} releases válidas para canal ${channel}`);
+        
+        if (validReleases.length === 0) {
+            return null;
+        }
+        
+        // Encontrar a release mais recente que seja superior à versão atual
+        const newerReleases = validReleases.filter(release => {
+            return this.isVersionNewer(release.tag_name, currentVersion);
+        });
+        
+        if (newerReleases.length === 0) {
+            this.log.info('✅ Versão atual está atualizada para o canal');
+            return null;
+        }
+        
+        // Retornar a release mais recente
+        const latestRelease = newerReleases[0]; // Releases já vêm ordenadas por data
+        this.log.info('🎯 Atualização encontrada:', {
+            from: currentVersion,
+            to: latestRelease.tag_name,
+            channel,
+            url: latestRelease.html_url
+        });
+        
+        return latestRelease;
+    }
+
+    isVersionNewer(newVersion, currentVersion) {
+        // Remover 'v' do início se presente
+        const cleanNew = newVersion.replace(/^v/, '');
+        const cleanCurrent = currentVersion.replace(/^v/, '');
+        
+        // Split em partes (major.minor.patch)
+        const newParts = cleanNew.split('.').map(part => {
+            // Extrair apenas números (ignorar sufixos como -alpha, -beta)
+            const match = part.match(/^\d+/);
+            return match ? parseInt(match[0]) : 0;
+        });
+        
+        const currentParts = cleanCurrent.split('.').map(part => {
+            const match = part.match(/^\d+/);
+            return match ? parseInt(match[0]) : 0;
+        });
+        
+        // Garantir que ambas tenham 3 partes
+        while (newParts.length < 3) newParts.push(0);
+        while (currentParts.length < 3) currentParts.push(0);
+        
+        // Comparar parte por parte
+        for (let i = 0; i < 3; i++) {
+            if (newParts[i] > currentParts[i]) return true;
+            if (newParts[i] < currentParts[i]) return false;
+        }
+        
+        // Se chegou aqui, as versões são iguais em major.minor.patch
+        // Para alpha/beta, considerar como "newer" se a tag for diferente
+        if (newVersion !== currentVersion) {
+            // Se a nova versão tem sufixo e a atual não, não é "newer"
+            if (cleanNew.includes('-') && !cleanCurrent.includes('-')) {
+                return false;
+            }
+            // Se a atual tem sufixo e a nova não, é "newer"
+            if (!cleanNew.includes('-') && cleanCurrent.includes('-')) {
+                return true;
+            }
+            // Ambas têm ou não têm sufixo, considerar different como newer para pre-releases
+            return cleanNew !== cleanCurrent;
+        }
+        
+        return false;
+    }
+
+    convertGitHubReleaseToUpdateInfo(release) {
+        return {
+            version: release.tag_name.replace(/^v/, ''),
+            files: release.assets ? release.assets.map(asset => ({
+                url: asset.browser_download_url,
+                size: asset.size
+            })) : [],
+            path: null,
+            sha512: null,
+            releaseDate: release.published_at,
+            releaseNotes: release.body || 'Nenhuma nota de versão disponível.',
+            releaseName: release.name || release.tag_name,
+            releaseNotesFile: null,
+            stagingPercentage: 100,
+            githubArtifactUrl: release.html_url,
+            prerelease: release.prerelease,
+            channel: this.determineChannelFromRelease(release)
+        };
+    }
+
+    determineChannelFromRelease(release) {
+        if (!release.prerelease) return 'release';
+        
+        const tagName = release.tag_name.toLowerCase();
+        if (/alpha|preview|experimental/.test(tagName)) return 'alpha';
+        if (/beta|rc|candidate/.test(tagName)) return 'beta';
+        
+        return 'release';
     }
 
     scheduleChecks() {

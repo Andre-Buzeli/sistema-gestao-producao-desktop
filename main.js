@@ -7,8 +7,9 @@ const dataStore = require('./backend/data-store');
 const express = require('express');
 const localtunnel = require('localtunnel');
 const sqlite3 = require('sqlite3').verbose();
-// Importar o novo sistema de auto-updater
+// Importar o novo sistema de auto-updater e config manager
 const AutoUpdaterManager = require('./backend/auto-updater');
+const ConfigManager = require('./backend/config-manager');
 
 // Logs principais
 const log = require('electron-log');
@@ -157,6 +158,7 @@ class DesktopManager {
         this.initialized = false; // Flag de inicialização
         this.sqliteAuthMiddleware = null; // Middleware de autenticação
         this.autoUpdater = null; // Gerenciador de auto-update
+        this.configManager = null; // Gerenciador de configurações
     }
 
     async initialize() {
@@ -172,6 +174,11 @@ class DesktopManager {
             console.log('🔗 Configurando IPC...');
             this.setupIPC();
             console.log('✅ IPC configurado');
+            
+            console.log('⚙️ Inicializando gerenciador de configurações...');
+            this.configManager = new ConfigManager();
+            await this.configManager.initialize();
+            console.log('✅ Gerenciador de configurações inicializado');
             
             console.log('🔄 Configurando auto-updater...');
             this.setupAutoUpdater();
@@ -665,22 +672,80 @@ class DesktopManager {
             isUpdating: this.isUpdating(),
             updateInfo: this.getUpdateInfo(),
             progressInfo: this.getUpdateProgress(),
-            version: app.getVersion()
+            version: app.getVersion(),
+            currentChannel: this.configManager ? this.configManager.getUpdateChannel() : 'release'
         }));
+
+        // Configurações de canais de atualização
+        ipcMain.handle('config:get-update-channel', () => {
+            return this.configManager ? this.configManager.getUpdateChannel() : 'release';
+        });
+        
+        ipcMain.handle('config:set-update-channel', async (event, channel) => {
+            if (!this.configManager) {
+                return { success: false, error: 'ConfigManager não disponível' };
+            }
+            
+            try {
+                const result = await this.configManager.setUpdateChannel(channel);
+                // Recarregar configuração do auto-updater
+                if (this.autoUpdater && this.autoUpdater.loadConfigurationFromManager) {
+                    this.autoUpdater.loadConfigurationFromManager();
+                }
+                
+                console.log(`🔄 Canal de atualização alterado para: ${channel}`);
+                this.notifyRenderer('config:channel-changed', result);
+                
+                return { success: true, ...result };
+            } catch (error) {
+                console.error('❌ Erro ao alterar canal:', error);
+                return { success: false, error: error.message };
+            }
+        });
+        
+        ipcMain.handle('config:get-all', () => {
+            return this.configManager ? this.configManager.getAll() : {};
+        });
+        
+        ipcMain.handle('config:get-system-info', () => {
+            return this.configManager ? this.configManager.getSystemInfo() : {};
+        });
+        
+        ipcMain.handle('config:get-channel-config', (event, channel) => {
+            return this.configManager ? this.configManager.getChannelConfig(channel) : {};
+        });
+        
+        ipcMain.handle('config:update-config', async (event, updates) => {
+            if (!this.configManager) {
+                return { success: false, error: 'ConfigManager não disponível' };
+            }
+            
+            try {
+                const result = await this.configManager.updateConfig(updates);
+                this.notifyRenderer('config:updated', updates);
+                return result;
+            } catch (error) {
+                console.error('❌ Erro ao atualizar configuração:', error);
+                return { success: false, error: error.message };
+            }
+        });
     }
 
     setupAutoUpdater() {
         try {
-            // Inicializar o novo sistema de auto-updater
-            this.autoUpdater = new AutoUpdaterManager();
+            // Inicializar o novo sistema de auto-updater com ConfigManager
+            this.autoUpdater = new AutoUpdaterManager(this.configManager);
             
             // Configurar listeners para comunicação com o renderer
             this.autoUpdater.on('checking-for-update', () => {
-            this.notifyRenderer('updater:checking');
-        });
+                this.notifyRenderer('updater:checking');
+            });
 
             this.autoUpdater.on('update-available', (info) => {
-            this.notifyRenderer('updater:available', info);
+                this.notifyRenderer('updater:available', {
+                    ...info,
+                    channel: info.channel || this.configManager.getUpdateChannel()
+                });
             });
 
             this.autoUpdater.on('update-not-available', (info) => {
@@ -692,8 +757,8 @@ class DesktopManager {
             });
 
             this.autoUpdater.on('download-progress', (progressObj) => {
-            this.notifyRenderer('updater:progress', progressObj);
-        });
+                this.notifyRenderer('updater:progress', progressObj);
+            });
 
             this.autoUpdater.on('update-downloaded', (info) => {
                 this.notifyRenderer('updater:downloaded', info);
@@ -707,7 +772,7 @@ class DesktopManager {
                 this.notifyRenderer('updater:install-started');
             });
 
-            console.log('✅ Sistema de auto-updater novo configurado com sucesso');
+            console.log('✅ Sistema de auto-updater com canais configurado com sucesso');
             
         } catch (error) {
             console.error('❌ Erro ao configurar auto-updater:', error);
