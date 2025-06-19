@@ -114,23 +114,23 @@ app.disableHardwareAcceleration();
 // Configurações de GPU - apenas em desenvolvimento
 if (!app.isPackaged) {
     // Suprimir logs de erro de GPU que são apenas avisos APENAS EM DESENVOLVIMENTO
-    process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
-    app.commandLine.appendSwitch('--disable-gpu');
-    app.commandLine.appendSwitch('--disable-gpu-sandbox');
-    app.commandLine.appendSwitch('--disable-software-rasterizer');
-    app.commandLine.appendSwitch('--disable-dev-shm-usage');
-    app.commandLine.appendSwitch('--no-sandbox');
-    app.commandLine.appendSwitch('--disable-features=VizDisplayCompositor');
-    app.commandLine.appendSwitch('--disable-accelerated-2d-canvas');
-    app.commandLine.appendSwitch('--disable-accelerated-jpeg-decoding');
-    app.commandLine.appendSwitch('--disable-accelerated-mjpeg-decode');
-    app.commandLine.appendSwitch('--disable-accelerated-video-decode');
-    app.commandLine.appendSwitch('--disable-background-timer-throttling');
-    app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows');
-    app.commandLine.appendSwitch('--disable-renderer-backgrounding');
-    app.commandLine.appendSwitch('--disable-web-security');
-    app.commandLine.appendSwitch('--in-process-gpu');
-    app.commandLine.appendSwitch('--disable-domain-reliability');
+process.env['ELECTRON_DISABLE_SECURITY_WARNINGS'] = 'true';
+app.commandLine.appendSwitch('--disable-gpu');
+app.commandLine.appendSwitch('--disable-gpu-sandbox');
+app.commandLine.appendSwitch('--disable-software-rasterizer');
+app.commandLine.appendSwitch('--disable-dev-shm-usage');
+app.commandLine.appendSwitch('--no-sandbox');
+app.commandLine.appendSwitch('--disable-features=VizDisplayCompositor');
+app.commandLine.appendSwitch('--disable-accelerated-2d-canvas');
+app.commandLine.appendSwitch('--disable-accelerated-jpeg-decoding');
+app.commandLine.appendSwitch('--disable-accelerated-mjpeg-decode');
+app.commandLine.appendSwitch('--disable-accelerated-video-decode');
+app.commandLine.appendSwitch('--disable-background-timer-throttling');
+app.commandLine.appendSwitch('--disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('--disable-renderer-backgrounding');
+app.commandLine.appendSwitch('--disable-web-security');
+app.commandLine.appendSwitch('--in-process-gpu');
+app.commandLine.appendSwitch('--disable-domain-reliability');
 } else {
     // EM PRODUÇÃO - Manter logs ativos para debug
     try {
@@ -676,11 +676,11 @@ class DesktopManager {
             
             // Configurar listeners para comunicação com o renderer
             this.autoUpdater.on('checking-for-update', () => {
-                this.notifyRenderer('updater:checking');
-            });
+            this.notifyRenderer('updater:checking');
+        });
 
             this.autoUpdater.on('update-available', (info) => {
-                this.notifyRenderer('updater:available', info);
+            this.notifyRenderer('updater:available', info);
             });
 
             this.autoUpdater.on('update-not-available', (info) => {
@@ -692,8 +692,8 @@ class DesktopManager {
             });
 
             this.autoUpdater.on('download-progress', (progressObj) => {
-                this.notifyRenderer('updater:progress', progressObj);
-            });
+            this.notifyRenderer('updater:progress', progressObj);
+        });
 
             this.autoUpdater.on('update-downloaded', (info) => {
                 this.notifyRenderer('updater:downloaded', info);
@@ -801,7 +801,7 @@ class DesktopManager {
             // Importar middleware SQLite para autenticação persistente
             console.log('🚀 ==> STARTSERVER - Passo 10: Importando middleware SQLite');
             try {
-                const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
+            const { createSQLiteAuthMiddleware } = require('./backend/sqlite-auth-middleware');
                 this.sqliteAuthMiddleware = this.database ? createSQLiteAuthMiddleware(this.database) : null;
                 console.log('🚀 ==> STARTSERVER - Passo 11: Middleware SQLite importado com sucesso');
             } catch (middlewareError) {
@@ -1292,46 +1292,46 @@ class DesktopManager {
                             <p>Gerando identificação do dispositivo...</p>
                         </div>
                         
-                        <script>
-                            function generateConsistentDeviceId() {
-                                let deviceId = localStorage.getItem('device_id');
-                                if (deviceId && deviceId.startsWith('TAB-')) {
-                                    return deviceId;
-                                }
-                                
-                                // Gerar ID baseado em características do dispositivo
-                                const browserInfo = [
-                                    navigator.userAgent,
-                                    navigator.language,
-                                    navigator.platform,
-                                    window.screen.width,
-                                    window.screen.height,
-                                    new Date().getTimezoneOffset()
-                                ].join('|');
-                                
-                                let hash = 0;
-                                for (let i = 0; i < browserInfo.length; i++) {
-                                    const char = browserInfo.charCodeAt(i);
-                                    hash = ((hash << 5) - hash) + char;
-                                    hash = hash & hash;
-                                }
-                                
-                                const timestamp = Date.now().toString(36);
-                                const randomPart = Math.random().toString(36).substring(2, 8);
-                                
-                                const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
-                                const finalMachineId = machineId.toUpperCase();
-                                
-                                localStorage.setItem('device_id', finalMachineId);
+                    <script>
+                    function generateConsistentDeviceId() {
+                        let deviceId = localStorage.getItem('device_id');
+                        if (deviceId && deviceId.startsWith('TAB-')) {
+                            return deviceId;
+                        }
+                        
+                        // Gerar ID baseado em características do dispositivo
+                        const browserInfo = [
+                            navigator.userAgent,
+                            navigator.language,
+                            navigator.platform,
+                            window.screen.width,
+                            window.screen.height,
+                            new Date().getTimezoneOffset()
+                        ].join('|');
+                        
+                        let hash = 0;
+                        for (let i = 0; i < browserInfo.length; i++) {
+                            const char = browserInfo.charCodeAt(i);
+                            hash = ((hash << 5) - hash) + char;
+                            hash = hash & hash;
+                        }
+                        
+                        const timestamp = Date.now().toString(36);
+                        const randomPart = Math.random().toString(36).substring(2, 8);
+                        
+                        const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
+                        const finalMachineId = machineId.toUpperCase();
+                        
+                        localStorage.setItem('device_id', finalMachineId);
                                 document.cookie = 'device_id=' + finalMachineId + '; path=/; max-age=31536000';
                                 console.log('🆕 Device ID gerado:', finalMachineId);
-                                
-                                return finalMachineId;
-                            }
-                            
+                        
+                        return finalMachineId;
+                    }
+                    
                             // Gerar Device ID e recarregar página
                             setTimeout(() => {
-                                const deviceId = generateConsistentDeviceId();
+                    const deviceId = generateConsistentDeviceId();
                                 console.log('🔄 Recarregando página com Device ID:', deviceId);
                                 window.location.reload();
                             }, 2000);
@@ -1427,16 +1427,16 @@ class DesktopManager {
                         const deviceId = '${req.deviceAuth.deviceId}';
                         
                         // Registrar dispositivo no sistema
-                        fetch('/api/tablet/register', {
-                            method: 'POST',
+                    fetch('/api/tablet/register', {
+                        method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                deviceId: deviceId,
-                                userAgent: navigator.userAgent,
-                                timestamp: Date.now()
-                            })
+                        body: JSON.stringify({
+                            deviceId: deviceId,
+                            userAgent: navigator.userAgent,
+                            timestamp: Date.now()
+                        })
                         }).then(response => response.json())
-                        .then(data => {
+                    .then(data => {
                             console.log('Dispositivo registrado:', data);
                         });
                         
@@ -1446,23 +1446,23 @@ class DesktopManager {
                             .then(response => response.json())
                             .then(data => {
                                 console.log('Status:', data);
-                                if (data.authorized) {
+                        if (data.authorized) {
                                     document.getElementById('status').innerHTML = '✅ Dispositivo autorizado! Redirecionando...';
                                     document.getElementById('status').className = 'status';
                                     setTimeout(() => {
                                         window.location.reload();
                                     }, 2000);
-                                }
-                            })
-                            .catch(error => {
+                        }
+                    })
+                    .catch(error => {
                                 console.error('Erro ao verificar status:', error);
-                            });
+                    });
                         }
                         
                         // Verificar status imediatamente e a cada 3 segundos
                         checkAuthStatus();
                         setInterval(checkAuthStatus, 3000);
-                    </script>
+                </script>
                 </body>
                 </html>
                 `;
@@ -1480,15 +1480,15 @@ class DesktopManager {
             
             try {
                 console.log('🚀 ==> STARTSERVER - Passo 51: Importando port-finder');
-                const { findAvailablePort } = require('./backend/port-finder');
+            const { findAvailablePort } = require('./backend/port-finder');
                 console.log('🚀 ==> STARTSERVER - Passo 52: Port-finder importado');
                 
                 console.log('🚀 ==> STARTSERVER - Passo 53: Procurando porta disponível');
-                const port = await findAvailablePort(this.serverPort);
+            const port = await findAvailablePort(this.serverPort);
                 console.log(`🚀 ==> STARTSERVER - Passo 54: Porta encontrada: ${port}`);
-                
+            
                 console.log('🚀 ==> STARTSERVER - Passo 55: Criando servidor HTTP');
-                this.httpServer = http.createServer(this.server);
+            this.httpServer = http.createServer(this.server);
                 console.log('🚀 ==> STARTSERVER - Passo 56: Servidor HTTP criado');
                 
                 console.log('🚀 ==> STARTSERVER - Passo 57: Iniciando listen do servidor');
@@ -1500,36 +1500,36 @@ class DesktopManager {
                         reject(new Error('Timeout ao iniciar servidor HTTP'));
                     }, 10000);
                     
-                    this.httpServer.listen(port, async () => {
+            this.httpServer.listen(port, async () => {
                         console.log('🚀 ==> STARTSERVER - Passo 58: Servidor HTTP listening callback executado');
                         clearTimeout(timeout);
                         
-                        this.serverPort = port;
-                        this.isServerRunning = true;
-                        
-                        console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
-                        console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
-                        console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
-                        
-                        // Adicionar log de servidor iniciado
-                        if (this.database) {
+                this.serverPort = port;
+                this.isServerRunning = true;
+                
+                console.log(`🚀 Servidor iniciado em http://localhost:${port}`);
+                console.log(`📱 Terminal Máquina: http://localhost:${port}/maquina`);
+                console.log(`🖥️ Desktop: http://localhost:${port}/desktop`);
+                
+                // Adicionar log de servidor iniciado
+                if (this.database) {
                             console.log('🚀 ==> STARTSERVER - Passo 59: Adicionando log de sucesso no banco');
-                            await this.database.addLog('server', 'info', `Servidor iniciado na porta ${port}`);
-                        }
-                        
-                        // Notificar renderer
+                    await this.database.addLog('server', 'info', `Servidor iniciado na porta ${port}`);
+                }
+                
+                // Notificar renderer
                         console.log('🚀 ==> STARTSERVER - Passo 60: Notificando renderer');
-                        this.notifyRenderer('server:ready', {
-                            port: port,
-                            localIP: this.getLocalIP(),
-                            timestamp: Date.now()
-                        });
-                        
-                        // Configurar túnel se disponível (não bloqueia o servidor)
+                this.notifyRenderer('server:ready', {
+                    port: port,
+                    localIP: this.getLocalIP(),
+                    timestamp: Date.now()
+                });
+                
+                // Configurar túnel se disponível (não bloqueia o servidor)
                         console.log('🚀 ==> STARTSERVER - Passo 61: Iniciando configuração de tunnel');
-                        this.setupExternalAccess().catch(err => {
-                            console.error('⚠️ LocalTunnel não pôde ser configurado, mas o servidor está funcionando localmente');
-                        });
+                this.setupExternalAccess().catch(err => {
+                    console.error('⚠️ LocalTunnel não pôde ser configurado, mas o servidor está funcionando localmente');
+                });
                         
                         console.log('🚀 ==> STARTSERVER - Passo 62: SUCESSO COMPLETO');
                         resolve({ success: true, message: 'Servidor iniciado com sucesso', port: port });
@@ -1565,8 +1565,8 @@ class DesktopManager {
             
             // Adicionar log de erro
             try {
-                if (this.database) {
-                    await this.database.addLog('server', 'error', `Erro ao iniciar servidor: ${error.message}`);
+            if (this.database) {
+                await this.database.addLog('server', 'error', `Erro ao iniciar servidor: ${error.message}`);
                 }
             } catch (logError) {
                 console.error('❌ ==> Erro ao salvar log de erro:', logError);
