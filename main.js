@@ -336,6 +336,71 @@ class DesktopManager {
                 ]
             },
             {
+                label: 'Debug',
+                submenu: [
+                    {
+                        label: 'Abrir Console (DevTools)',
+                        accelerator: 'CmdOrCtrl+Shift+I',
+                        click: () => {
+                            if (this.mainWindow) {
+                                this.mainWindow.webContents.openDevTools();
+                            }
+                        }
+                    },
+                    {
+                        label: 'Forçar Reload',
+                        accelerator: 'CmdOrCtrl+R',
+                        click: () => {
+                            if (this.mainWindow) {
+                                this.mainWindow.webContents.reload();
+                            }
+                        }
+                    },
+                    { type: 'separator' },
+                    {
+                        label: 'Debug Ordens no Console',
+                        click: () => {
+                            if (this.mainWindow) {
+                                // Injetar código JavaScript para debug das ordens
+                                this.mainWindow.webContents.executeJavaScript(`
+                                    console.log("=== DEBUG MANUAL DAS ORDENS ===");
+                                    if (typeof orders !== 'undefined') {
+                                        console.log("📦 orders disponível:", orders);
+                                        orders.forEach((order, index) => {
+                                            console.log(\`📋 Ordem \${index + 1}:\`, order);
+                                            console.log(\`📋 order.products_data:\`, order.products_data);
+                                            console.log(\`📋 Tipo:\`, typeof order.products_data);
+                                            if (order.products_data) {
+                                                try {
+                                                    const parsed = JSON.parse(order.products_data);
+                                                    console.log(\`✅ Parse OK - \${parsed.length} produtos:\`, parsed);
+                                                } catch (e) {
+                                                    console.log(\`❌ Erro no parse:\`, e.message);
+                                                }
+                                            }
+                                        });
+                                    } else {
+                                        console.log("❌ Variable 'orders' não encontrada");
+                                        console.log("🔍 Tentando window.orders...");
+                                        if (typeof window.orders !== 'undefined') {
+                                            console.log("📦 window.orders:", window.orders);
+                                        }
+                                    }
+                                    
+                                    // Verificar se a função displayOrders existe
+                                    if (typeof displayOrders === 'function') {
+                                        console.log("🔍 Executando displayOrders() manualmente...");
+                                        displayOrders();
+                                    } else {
+                                        console.log("❌ Função displayOrders não encontrada");
+                                    }
+                                `);
+                            }
+                        }
+                    }
+                ]
+            },
+            {
                 label: 'Ajuda',
                 submenu: [
                     {
@@ -478,26 +543,24 @@ class DesktopManager {
                 if (this.database) {
                     const result = await this.database.deleteProduct(id);
                     if (result.success) {
-                        return result;
+                        updateProductsTimestamp();
+                        res.json({ success: true, message: 'Produto removido com sucesso' });
+                    } else {
+                        res.status(404).json({ error: 'Produto não encontrado' });
+                    }
+                } else {
+                    // Fallback para dataStore
+                    const removed = dataStore.removeProduct(category, productId);
+                    if (removed) {
+                        updateProductsTimestamp();
+                        res.json({ success: true, message: 'Produto removido com sucesso' });
+                    } else {
+                        res.status(404).json({ error: 'Produto não encontrado' });
                     }
                 }
-                
-                // Fallback para dataStore - precisa encontrar em qual categoria está o produto
-                const allProducts = dataStore.getAllProducts();
-                let found = false;
-                for (const category of Object.keys(allProducts)) {
-                    const categoryProducts = allProducts[category];
-                    if (categoryProducts.find(p => p.id === id)) {
-                        dataStore.removeProduct(category, id);
-                        found = true;
-                        break;
-                    }
-                }
-                
-                return { success: found, message: found ? 'Produto removido' : 'Produto não encontrado' };
             } catch (error) {
-                console.error('Erro ao deletar produto:', error);
-                return { success: false, message: error.message };
+                console.error('Erro ao remover produto:', error);
+                res.status(500).json({ error: 'Erro interno do servidor' });
             }
         });
 
@@ -651,6 +714,10 @@ class DesktopManager {
         });
         ipcMain.handle('settings:get', () => this.database ? this.database.getSettings() : {});
         ipcMain.handle('settings:update', (event, settings) => this.database.updateSettings(settings));
+
+        // Informações da aplicação
+        ipcMain.handle('app:getVersion', () => app.getVersion());
+        ipcMain.handle('app:getName', () => app.getName());
 
         // Backup e restore
         ipcMain.handle('data:backup', () => this.backupData());
@@ -1278,20 +1345,30 @@ class DesktopManager {
                     const orderData = req.body;
                     
                     console.log(`📋 Ordem ${orderCode} recebida para processamento`);
+                    console.log(`🔍 [DEBUG] Dados recebidos do frontend:`, JSON.stringify(orderData, null, 2));
+                    console.log(`🔍 [DEBUG] orderData.products:`, orderData.products);
+                    console.log(`🔍 [DEBUG] Tipo orderData.products:`, typeof orderData.products, 'Array:', Array.isArray(orderData.products));
+                    console.log(`🔍 [DEBUG] Quantidade de produtos:`, orderData.products ? orderData.products.length : 'undefined');
                     
                     if (this.database) {
                         // Preparar dados para salvar no banco SQLite
+                        const productsDataString = JSON.stringify(orderData.products || []);
+                        console.log(`🔍 [DEBUG] products_data string para salvar:`, productsDataString);
+                        
                         const orderToSave = {
                             order_code: orderCode,
-                            products_data: JSON.stringify(orderData.products || []),
+                            products_data: productsDataString,
                             device_id: orderData.terminal || 'unknown',
                             operator: orderData.operator || 'Operador',
                             notes: `Ordem concluída em ${new Date().toLocaleString()}`,
                             status: 'completed'
                         };
                         
+                        console.log(`🔍 [DEBUG] Objeto completo para salvar:`, JSON.stringify(orderToSave, null, 2));
+                        
                         const result = await this.database.createOrder(orderToSave);
                         console.log(`✅ Ordem ${orderCode} salva no banco SQLite`);
+                        console.log(`🔍 [DEBUG] Resultado do salvamento:`, result);
                         
                         res.json({ 
                             success: true, 
@@ -1313,7 +1390,7 @@ class DesktopManager {
                     
                     updateProductsTimestamp(); // Atualiza o timestamp global
                 } catch (error) {
-                    console.error('Erro ao salvar ordem:', error);
+                    console.error('❌ Erro ao salvar ordem:', error);
                     res.status(500).json({ error: 'Erro interno do servidor' });
                 }
             });
@@ -1348,6 +1425,7 @@ class DesktopManager {
                             .loading { font-size: 24px; margin: 20px; }
                             .spinner { animation: spin 1s linear infinite; font-size: 30px; }
                             @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                            .debug { font-family: monospace; font-size: 12px; background: #f8f9fa; padding: 10px; margin: 20px; text-align: left; border-radius: 5px; }
                         </style>
                     </head>
                     <body>
@@ -1357,12 +1435,30 @@ class DesktopManager {
                             <p>Gerando identificação do dispositivo...</p>
                         </div>
                         
+                        <div class="debug" id="debug-info">
+                            <strong>Debug Info:</strong><br>
+                            <span id="debug-log">Iniciando geração...</span>
+                        </div>
+                        
                     <script>
+                    function updateDebug(message) {
+                        const debugLog = document.getElementById('debug-log');
+                        if (debugLog) {
+                            debugLog.innerHTML += '<br>' + new Date().toLocaleTimeString() + ': ' + message;
+                        }
+                        console.log('🔧 [DEBUG]', message);
+                    }
+                    
                     function generateConsistentDeviceId() {
+                        updateDebug('Verificando localStorage...');
                         let deviceId = localStorage.getItem('device_id');
+                        
                         if (deviceId && deviceId.startsWith('TAB-')) {
+                            updateDebug('Device ID existente encontrado: ' + deviceId);
                             return deviceId;
                         }
+                        
+                        updateDebug('Gerando novo Device ID...');
                         
                         // Gerar ID baseado em características do dispositivo
                         const browserInfo = [
@@ -1387,19 +1483,44 @@ class DesktopManager {
                         const machineId = 'TAB-' + Math.abs(hash).toString(36).substring(0, 4) + '-' + timestamp.substring(timestamp.length - 4) + '-' + randomPart;
                         const finalMachineId = machineId.toUpperCase();
                         
+                        updateDebug('Device ID gerado: ' + finalMachineId);
+                        
+                        // Salvar no localStorage
                         localStorage.setItem('device_id', finalMachineId);
-                                document.cookie = 'device_id=' + finalMachineId + '; path=/; max-age=31536000';
-                                console.log('🆕 Device ID gerado:', finalMachineId);
+                        updateDebug('Salvo no localStorage');
+                        
+                        // Salvar no cookie com configurações mais robustas
+                        document.cookie = 'device_id=' + finalMachineId + '; path=/; max-age=31536000; SameSite=Lax';
+                        updateDebug('Cookie setado');
+                        
+                        // Verificar se cookie foi salvo
+                        setTimeout(() => {
+                            const cookieCheck = document.cookie.includes('device_id=' + finalMachineId);
+                            updateDebug('Cookie verificado: ' + (cookieCheck ? 'OK' : 'FALHOU'));
+                        }, 100);
+                        
+                        console.log('🆕 Device ID gerado:', finalMachineId);
                         
                         return finalMachineId;
                     }
                     
-                            // Gerar Device ID e recarregar página
-                            setTimeout(() => {
-                    const deviceId = generateConsistentDeviceId();
-                                console.log('🔄 Recarregando página com Device ID:', deviceId);
-                                window.location.reload();
-                            }, 2000);
+                    // Gerar Device ID e recarregar página
+                    setTimeout(() => {
+                        const deviceId = generateConsistentDeviceId();
+                        updateDebug('Preparando reload...');
+                        
+                        // Aguardar um pouco mais para garantir que cookie seja salvo
+                        setTimeout(() => {
+                            updateDebug('Fazendo reload com Device ID: ' + deviceId);
+                            console.log('🔄 Recarregando página com Device ID:', deviceId);
+                            
+                            // Fazer reload forçando envio do Device ID via URL também como fallback
+                            const currentUrl = new URL(window.location.href);
+                            currentUrl.searchParams.set('device_id', deviceId);
+                            
+                            window.location.href = currentUrl.toString();
+                        }, 500);
+                    }, 2000);
                         </script>
                     </body>
                     </html>
@@ -1703,7 +1824,7 @@ class DesktopManager {
                 console.log('🔄 Tentando LocalTunnel com subdomain...');
                 return localtunnel({
                     port: this.serverPort,
-                    subdomain: `gestao-prod-${Date.now().toString().slice(-6)}`
+                    subdomain: 'gestao-producao'
                 });
             };
             
